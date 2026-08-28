@@ -1,9 +1,10 @@
 /**
- * Firebase App Initialization & Authentication Engine
+ * Firebase App Initialization & Authentication Engine for PaperVault
+ * Connected Project: papervault-61ba0
  * Features:
  * - Google Account Sign-In (Firebase Auth popup)
- * - Cloud Firestore instance
- * - LocalStorage Config Persistence with Interactive Setup Modal
+ * - Cloud Firestore cross-device sync
+ * - Ready out-of-the-box with pre-configured project credentials
  */
 
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
@@ -18,7 +19,18 @@ import {
   getFirestore 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-const STORAGE_KEY_FIREBASE_CONFIG = 'thesismind_firebase_config';
+const STORAGE_KEY_FIREBASE_CONFIG = 'papervault_firebase_config';
+
+// Default pre-configured Firebase project for PaperVault
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA8iKTyMKo13XS921r9xJDiUDQwTYZmLbg",
+  authDomain: "papervault-61ba0.firebaseapp.com",
+  projectId: "papervault-61ba0",
+  storageBucket: "papervault-61ba0.firebasestorage.app",
+  messagingSenderId: "1028823295239",
+  appId: "1:1028823295239:web:e2488035dbdfb982c751a2",
+  measurementId: "G-84X5TVYT7Z"
+};
 
 class FirebaseService {
   constructor() {
@@ -35,10 +47,10 @@ class FirebaseService {
   getSavedConfig() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_FIREBASE_CONFIG);
-      return raw ? JSON.parse(raw) : null;
+      return raw ? JSON.parse(raw) : DEFAULT_FIREBASE_CONFIG;
     } catch (e) {
-      console.warn('Failed to parse saved Firebase config:', e);
-      return null;
+      console.warn('Failed to parse saved Firebase config, using default:', e);
+      return DEFAULT_FIREBASE_CONFIG;
     }
   }
 
