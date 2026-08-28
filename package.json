@@ -1,8 +1,8 @@
 {
-  "name": "thesismind-workspace",
+  "name": "papervault-workspace",
   "version": "1.0.0",
-  "description": "Thesis Reading, Annotation & Literature Review Studio",
-  "author": "ThesisMind",
+  "description": "PaperVault - Thesis & Research Paper Reading, Annotation, Synthesis Matrix & Cloud Sync Studio",
+  "author": "PaperVault",
   "license": "MIT",
   "main": "index.html",
   "scripts": {
@@ -10,12 +10,14 @@
     "dev": "python serve.py"
   },
   "keywords": [
+    "papervault",
     "thesis",
     "research-papers",
     "pdf-annotation",
     "literature-review",
     "bibtex",
     "citation-manager",
-    "matrix"
+    "matrix",
+    "firebase-sync"
   ]
 }
