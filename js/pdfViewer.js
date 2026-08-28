@@ -569,19 +569,83 @@ export class PDFViewerEngine {
     }
   }
 
+  _extractPreciseSelectionRects(range, pageEl) {
+    const pageRect = pageEl.getBoundingClientRect();
+    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
+    if (!rawRects.length) return [];
+
+    // Group rects into lines (tolerance 6px)
+    const lines = [];
+    rawRects.forEach(rect => {
+      const matchedLine = lines.find(l => Math.abs(l.top - rect.top) < 6);
+      if (matchedLine) {
+        matchedLine.rects.push(rect);
+        matchedLine.top = Math.min(matchedLine.top, rect.top);
+        matchedLine.bottom = Math.max(matchedLine.bottom, rect.bottom);
+      } else {
+        lines.push({
+          top: rect.top,
+          bottom: rect.bottom,
+          rects: [rect]
+        });
+      }
+    });
+
+    const mergedRects = [];
+    lines.forEach(line => {
+      line.rects.sort((a, b) => a.left - b.left);
+      let cur = {
+        left: line.rects[0].left,
+        right: line.rects[0].right,
+        top: line.top,
+        height: line.bottom - line.top
+      };
+
+      for (let i = 1; i < line.rects.length; i++) {
+        const r = line.rects[i];
+        if (r.left <= cur.right + 6) {
+          cur.right = Math.max(cur.right, r.right);
+        } else {
+          mergedRects.push({
+            left: cur.left,
+            top: cur.top,
+            width: cur.right - cur.left,
+            height: cur.height
+          });
+          cur = {
+            left: r.left,
+            right: r.right,
+            top: line.top,
+            height: line.bottom - line.top
+          };
+        }
+      }
+      mergedRects.push({
+        left: cur.left,
+        top: cur.top,
+        width: cur.right - cur.left,
+        height: cur.height
+      });
+    });
+
+    return mergedRects.map(r => {
+      const adjustedTop = r.top + r.height * 0.05;
+      const adjustedHeight = r.height * 0.90;
+      return {
+        left: Math.max(0, (r.left - pageRect.left) / pageRect.width),
+        top: Math.max(0, (adjustedTop - pageRect.top) / pageRect.height),
+        width: Math.min(1, r.width / pageRect.width),
+        height: Math.min(1, adjustedHeight / pageRect.height)
+      };
+    });
+  }
+
   async _applyHighlight(colorId) {
     if (!this.activeSelection || !this.currentFile) return;
 
     const { text, pageNumber, range, pageEl } = this.activeSelection;
-    const pageRect = pageEl.getBoundingClientRect();
-    const clientRects = Array.from(range.getClientRects());
-    
-    const normalizedRects = clientRects.map(r => ({
-      left: (r.left - pageRect.left) / pageRect.width,
-      top: (r.top - pageRect.top) / pageRect.height,
-      width: r.width / pageRect.width,
-      height: r.height / pageRect.height,
-    }));
+    const normalizedRects = this._extractPreciseSelectionRects(range, pageEl);
+    if (!normalizedRects.length) return;
 
     const hl = createHighlight({
       fileId: this.currentFile.id,
@@ -604,15 +668,8 @@ export class PDFViewerEngine {
     if (!this.activeSelection || !this.currentFile) return;
 
     const { text, pageNumber, range, pageEl } = this.activeSelection;
-    const pageRect = pageEl.getBoundingClientRect();
-    const clientRects = Array.from(range.getClientRects());
-    
-    const normalizedRects = clientRects.map(r => ({
-      left: (r.left - pageRect.left) / pageRect.width,
-      top: (r.top - pageRect.top) / pageRect.height,
-      width: r.width / pageRect.width,
-      height: r.height / pageRect.height,
-    }));
+    const normalizedRects = this._extractPreciseSelectionRects(range, pageEl);
+    if (!normalizedRects.length) return;
 
     const hl = createHighlight({
       fileId: this.currentFile.id,

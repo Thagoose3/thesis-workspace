@@ -1,6 +1,9 @@
 /**
- * Instant Text-to-Speech (TTS) Engine for Thesis & Paper Reading
- * Uses standard Web Speech API with rate adjustment and playback state callbacks.
+ * ThesisMind Intelligent Speech Synthesis (TTS) Engine
+ * Features:
+ * - Multi-language support: Thai (th-TH) & English (en) with auto-detection.
+ * - "F.R.I.D.A.Y." AI Assistant Voice Persona (Iron Man AI cadence - Irish/British crisp, intelligent tone).
+ * - Clean academic text filtering (strips bracketed citations [1], markdown, formulas).
  */
 
 class TTSEngine {
@@ -9,7 +12,7 @@ class TTSEngine {
     this.currentUtterance = null;
     this.isPlaying = false;
     this.isPaused = false;
-    this.rate = 1.0; // 0.75, 1.0, 1.25, 1.5
+    this.rate = 1.0;
     this.currentText = '';
     this.listeners = new Set();
     this.voices = [];
@@ -43,15 +46,47 @@ class TTSEngine {
     }
   }
 
-  getEnglishVoice() {
+  isThaiText(text) {
+    return /[\u0E00-\u0E7F]/.test(text);
+  }
+
+  getThaiVoice() {
     if (!this.voices.length) this._loadVoices();
-    // Prefer Google UK/US English or Natural voices
+    // Prioritize natural Thai female voices
     return (
-      this.voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha'))) ||
+      this.voices.find(v => v.lang.startsWith('th') && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Premwadee') || v.name.includes('Google'))) ||
+      this.voices.find(v => v.lang.startsWith('th') || v.lang.includes('TH')) ||
+      null
+    );
+  }
+
+  getFridayAIVoice() {
+    if (!this.voices.length) this._loadVoices();
+    // FRIDAY persona: Irish (en-IE) or British (en-GB) crisp AI assistant voice
+    return (
+      // 1. Irish English (FRIDAY original accent)
+      this.voices.find(v => (v.lang === 'en-IE' || v.lang.startsWith('en_IE')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Emily') || v.name.includes('Moira'))) ||
+      this.voices.find(v => v.lang === 'en-IE' || v.lang.startsWith('en_IE')) ||
+      // 2. British English Female (Libby, Sonia, Victoria, Fiona, Hazel, Google UK)
+      this.voices.find(v => (v.lang === 'en-GB' || v.lang.startsWith('en_GB')) && (v.name.includes('Libby') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Sonia') || v.name.includes('Victoria'))) ||
+      this.voices.find(v => (v.lang === 'en-GB' || v.lang.startsWith('en_GB')) && (v.name.includes('Google') || v.name.includes('Female') || v.name.includes('Fiona'))) ||
+      this.voices.find(v => v.lang === 'en-GB' || v.lang.startsWith('en_GB')) ||
+      // 3. Smooth US English AI Female fallback (Jenny, Samantha, Ava)
+      this.voices.find(v => v.lang.startsWith('en') && (v.name.includes('Jenny') || v.name.includes('Samantha') || v.name.includes('Natural') || v.name.includes('Neural'))) ||
       this.voices.find(v => v.lang.startsWith('en')) ||
       this.voices[0] ||
       null
     );
+  }
+
+  _cleanTextForSpeech(text) {
+    return text
+      .replace(/\[\d+(?:,\s*\d+)*\]/g, '') // remove [1], [2, 3] citations
+      .replace(/\((?:(?:19|20)\d{2}|[A-Z][a-z]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2})\)/g, '') // remove (Author, 2024)
+      .replace(/https?:\/\/\S+/g, 'link')
+      .replace(/[*_#`~>]/g, '') // strip markdown
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   speak(text) {
@@ -64,13 +99,27 @@ class TTSEngine {
 
     this.stop();
 
-    this.currentText = text.trim();
-    this.currentUtterance = new SpeechSynthesisUtterance(this.currentText);
-    this.currentUtterance.rate = this.rate;
+    const cleanText = this._cleanTextForSpeech(text);
+    if (!cleanText) return;
 
-    const voice = this.getEnglishVoice();
-    if (voice) {
-      this.currentUtterance.voice = voice;
+    this.currentText = text.trim();
+    this.currentUtterance = new SpeechSynthesisUtterance(cleanText);
+
+    const isThai = this.isThaiText(cleanText);
+
+    if (isThai) {
+      this.currentUtterance.lang = 'th-TH';
+      const thaiVoice = this.getThaiVoice();
+      if (thaiVoice) this.currentUtterance.voice = thaiVoice;
+      this.currentUtterance.pitch = 1.05;
+      this.currentUtterance.rate = this.rate * 1.0;
+    } else {
+      this.currentUtterance.lang = 'en-GB';
+      const fridayVoice = this.getFridayAIVoice();
+      if (fridayVoice) this.currentUtterance.voice = fridayVoice;
+      // F.R.I.D.A.Y. AI tone: slightly elevated pitch (1.08) for crisp, clear synthetic delivery
+      this.currentUtterance.pitch = 1.08;
+      this.currentUtterance.rate = this.rate * 1.03;
     }
 
     this.currentUtterance.onstart = () => {
