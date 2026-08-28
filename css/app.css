@@ -75,43 +75,60 @@ body {
   background-color: #18181b !important;
 }
 
-/* Text Selection Layer */
+/* Precision PDF.js Text Layer Specification (Crystal-clear alignment & selection) */
 .textLayer {
   position: absolute;
+  text-align: initial;
   left: 0;
   top: 0;
   right: 0;
   bottom: 0;
   overflow: hidden;
-  opacity: 0.2;
-  line-height: 1;
+  opacity: 1;
+  line-height: 1.0;
+  text-size-adjust: none;
+  forced-color-adjust: none;
   transform-origin: 0 0;
-  z-index: 2;
+  z-index: 4;
   user-select: text;
   -webkit-user-select: text;
 }
 
-.textLayer ::selection {
-  background: rgba(59, 130, 246, 0.4) !important;
-  color: transparent !important;
-}
-
-.textLayer span {
+.textLayer span,
+.textLayer span br {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-/* Highlighting Overlays - Crystal-clear Pastel Colors that keep text 100% readable */
+/* Selection Highlight in TextLayer */
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.35) !important;
+  color: transparent !important;
+}
+
+/* Highlighting Overlays - Crystal-clear Translucent Pastel Colors */
+.highlight-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .pdf-highlight {
   position: absolute;
   pointer-events: auto;
   cursor: pointer;
   mix-blend-mode: multiply;
   border-radius: 2px;
-  z-index: 3;
   transition: opacity 0.12s ease;
 }
 

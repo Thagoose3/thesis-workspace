@@ -406,15 +406,29 @@ export class PDFViewerEngine {
     this.selectionToolbar.appendChild(ttsBtn);
     document.body.appendChild(this.selectionToolbar);
 
+    // Show toolbar ONLY on mouseup after user finishes selecting text cleanly
+    document.addEventListener('mouseup', (e) => {
+      if (this.activeTool !== 'select') return;
+      if (this.selectionToolbar && this.selectionToolbar.contains(e.target)) return;
+      if (this.highlightPopover && this.highlightPopover.contains(e.target)) return;
+      
+      // Delay slightly so browser selection range settles accurately
+      setTimeout(() => {
+        this._handleSelectionChange();
+      }, 20);
+    });
+
+    // Hide toolbar when selection is cleared
     document.addEventListener('selectionchange', () => {
-      this._handleSelectionChange();
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+        this.hideSelectionToolbar();
+      }
     });
 
     document.addEventListener('mousedown', (e) => {
       if (this.selectionToolbar && !this.selectionToolbar.contains(e.target)) {
-        if (!window.getSelection()?.isCollapsed) {
-          // keep
-        } else {
+        if (window.getSelection()?.isCollapsed) {
           this.hideSelectionToolbar();
         }
       }
@@ -533,13 +547,17 @@ export class PDFViewerEngine {
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
+      this.hideSelectionToolbar();
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText || selectedText.length === 0) {
+      this.hideSelectionToolbar();
       return;
     }
 
     const range = selection.getRangeAt(0);
-    const selectedText = selection.toString().trim();
-    if (!selectedText) return;
-
     const commonAncestor = range.commonAncestorContainer;
     const pageEl = commonAncestor.nodeType === Node.ELEMENT_NODE 
       ? commonAncestor.closest('.pdf-page-container')
@@ -553,6 +571,11 @@ export class PDFViewerEngine {
     const pageNum = parseInt(pageEl.getAttribute('data-page-number'), 10);
     const rect = range.getBoundingClientRect();
 
+    if (rect.width === 0 && rect.height === 0) {
+      this.hideSelectionToolbar();
+      return;
+    }
+
     this.activeSelection = {
       text: selectedText,
       pageNumber: pageNum,
@@ -561,8 +584,11 @@ export class PDFViewerEngine {
       rect: rect
     };
 
-    this.selectionToolbar.style.left = `${rect.left + rect.width / 2}px`;
-    this.selectionToolbar.style.top = `${Math.max(10, rect.top - 44)}px`;
+    const topPos = Math.max(16, rect.top - 46);
+    const leftPos = Math.max(120, Math.min(window.innerWidth - 120, rect.left + rect.width / 2));
+
+    this.selectionToolbar.style.left = `${leftPos}px`;
+    this.selectionToolbar.style.top = `${topPos}px`;
     this.selectionToolbar.style.transform = 'translateX(-50%)';
     this.selectionToolbar.classList.remove('hidden');
   }
@@ -870,6 +896,8 @@ export class PDFViewerEngine {
         el.title = hl.text;
         
         el.addEventListener('click', (e) => {
+          const sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
           e.stopPropagation();
           this.showHighlightPopover(hl, el);
         });
