@@ -1,6 +1,7 @@
 /**
  * Ultra-Minimalist File Explorer & Document Tree for ThesisMind
  * Features:
+ * - Collapsible Sections (กดย่อ/พับหัวข้อหลัก Recent, Folders, Files ได้อย่างอิสระ)
  * - Back Button & ".." Parent Navigation (ปุ่มย้อนกลับจากการเข้าโฟลเดอร์)
  * - Native Drag & Drop Moving (ลากไฟล์เปเปอร์ไปวางใส่โฟลเดอร์/ปุ่มย้อนกลับได้ทันที)
  * - Recent / Active Reading List with 1-click Close
@@ -22,6 +23,11 @@ export class FileExplorer {
     this.selectedFileId = null;
     this.showHidden = false;
     this.draggedFileId = null;
+    this.collapsedSections = {
+      recent: false,
+      folders: false,
+      files: false
+    };
     
     this.onFileSelect = options.onFileSelect || (() => {});
     this.onFileClose = options.onFileClose || (() => {});
@@ -31,6 +37,7 @@ export class FileExplorer {
     this.onShowToast = options.onShowToast || ((msg) => console.log(msg));
 
     this._loadRecentFromStorage();
+    this._loadCollapsedFromStorage();
   }
 
   _loadRecentFromStorage() {
@@ -48,6 +55,27 @@ export class FileExplorer {
     try {
       localStorage.setItem('thesismind_recent_files', JSON.stringify(this.recentFileIds));
     } catch (e) {}
+  }
+
+  _loadCollapsedFromStorage() {
+    try {
+      const stored = localStorage.getItem('thesismind_collapsed_sections');
+      if (stored) {
+        this.collapsedSections = { ...this.collapsedSections, ...JSON.parse(stored) };
+      }
+    } catch (e) {}
+  }
+
+  _saveCollapsedToStorage() {
+    try {
+      localStorage.setItem('thesismind_collapsed_sections', JSON.stringify(this.collapsedSections));
+    } catch (e) {}
+  }
+
+  toggleSection(sectionKey) {
+    this.collapsedSections[sectionKey] = !this.collapsedSections[sectionKey];
+    this._saveCollapsedToStorage();
+    this.render();
   }
 
   addToRecent(fileId) {
@@ -166,6 +194,10 @@ export class FileExplorer {
     const isInsideFolder = this.currentFolderId !== null;
     const parentFolderId = curFolder ? curFolder.parentId : null;
 
+    const isRecentCollapsed = this.collapsedSections.recent;
+    const isFoldersCollapsed = this.collapsedSections.folders;
+    const isFilesCollapsed = this.collapsedSections.files;
+
     this.container.innerHTML = `
       <div class="h-full flex flex-col bg-zinc-900 text-zinc-300 border-r border-white/[0.06] select-none">
         
@@ -217,152 +249,172 @@ export class FileExplorer {
         ` : ''}
 
         <!-- Main Scrollable Content -->
-        <div class="flex-1 overflow-y-auto p-2 space-y-3.5" id="drop-zone">
+        <div class="flex-1 overflow-y-auto p-2 space-y-3" id="drop-zone">
           
-          <!-- Section 1: Recent / Opened Papers -->
+          <!-- Section 1: Recent / Opened Papers (Collapsible) -->
           ${recentFiles.length > 0 ? `
             <div class="space-y-1">
-              <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 flex items-center justify-between">
-                <span>Recent (${recentFiles.length})</span>
+              <!-- Collapsible Header -->
+              <button class="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 uppercase transition rounded hover:bg-white/[0.03] btn-collapse-section" data-section="recent">
+                <div class="flex items-center space-x-1.5">
+                  <svg class="w-3 h-3 text-zinc-500 transition-transform duration-200 ${isRecentCollapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  <span class="font-semibold">Recent (${recentFiles.length})</span>
+                </div>
                 <span class="text-[8px] text-zinc-600">Active</span>
-              </div>
+              </button>
 
-              <div class="space-y-0.5">
-                ${recentFiles.map(file => {
-                  const isSelected = file.id === this.selectedFileId;
-                  return `
-                    <div class="group px-2 py-1.5 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/20 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'}" draggable="true" data-file-id="${file.id}">
-                      <div class="flex items-center justify-between space-x-1.5">
-                        <div class="flex items-center space-x-1.5 min-w-0 flex-1">
-                          <svg class="w-3.5 h-3.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                          <p class="text-xs truncate ${isSelected ? 'text-blue-200 font-medium' : 'text-zinc-200'}">${file.name}</p>
+              ${!isRecentCollapsed ? `
+                <div class="space-y-0.5 pt-0.5">
+                  ${recentFiles.map(file => {
+                    const isSelected = file.id === this.selectedFileId;
+                    return `
+                      <div class="group px-2 py-1.5 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/20 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'}" draggable="true" data-file-id="${file.id}">
+                        <div class="flex items-center justify-between space-x-1.5">
+                          <div class="flex items-center space-x-1.5 min-w-0 flex-1">
+                            <svg class="w-3.5 h-3.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <p class="text-xs truncate ${isSelected ? 'text-blue-200 font-medium' : 'text-zinc-200'}">${file.name}</p>
+                          </div>
+
+                          <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition btn-close-recent" data-file-id="${file.id}" title="Close / Remove from Recent">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                          </button>
                         </div>
-
-                        <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition btn-close-recent" data-file-id="${file.id}" title="Close / Remove from Recent">
-                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                        </button>
                       </div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
+                    `;
+                  }).join('')}
+                </div>
+              ` : ''}
             </div>
           ` : ''}
 
-          <!-- Section 2: Folders (Drag Targets & Parent ".." row) -->
-          <div class="space-y-0.5">
-            <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex items-center justify-between">
-              <span>Folders</span>
+          <!-- Section 2: Folders (Collapsible & Drag Targets) -->
+          <div class="space-y-1">
+            <!-- Collapsible Header -->
+            <button class="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 uppercase transition rounded hover:bg-white/[0.03] btn-collapse-section" data-section="folders">
+              <div class="flex items-center space-x-1.5">
+                <svg class="w-3 h-3 text-zinc-500 transition-transform duration-200 ${isFoldersCollapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                <span class="font-semibold">Folders (${subfolders.length})</span>
+              </div>
               <span class="text-[8px] text-zinc-600">Drag papers here</span>
-            </div>
+            </button>
 
-            <div class="space-y-0.5">
-              <!-- Up/Parent folder item if inside subfolder -->
-              ${isInsideFolder ? `
-                <div class="group flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 transition cursor-pointer folder-item-parent" data-folder-id="${parentFolderId || 'root'}">
-                  <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
-                  <span class="text-xs font-medium truncate">.. (Up to ${parentFolderId ? 'Parent' : 'Root'})</span>
-                </div>
-              ` : ''}
-
-              ${subfolders.length === 0 && !this.activeTag && !isInsideFolder ? `
-                <p class="text-[10px] text-zinc-600 px-2 italic">No subfolders</p>
-              ` : ''}
-
-              ${subfolders.map(f => `
-                <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
-                  <div class="flex items-center space-x-2 min-w-0 flex-1">
-                    <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-                    <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
+            ${!isFoldersCollapsed ? `
+              <div class="space-y-0.5 pt-0.5">
+                <!-- Up/Parent folder item if inside subfolder -->
+                ${isInsideFolder ? `
+                  <div class="group flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 transition cursor-pointer folder-item-parent" data-folder-id="${parentFolderId || 'root'}">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+                    <span class="text-xs font-medium truncate">.. (Up to ${parentFolderId ? 'Parent' : 'Root'})</span>
                   </div>
-                  <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                    <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                    </button>
-                    <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
+                ` : ''}
+
+                ${subfolders.length === 0 && !this.activeTag && !isInsideFolder ? `
+                  <p class="text-[10px] text-zinc-600 px-2 italic py-1">No subfolders</p>
+                ` : ''}
+
+                ${subfolders.map(f => `
+                  <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
+                    <div class="flex items-center space-x-2 min-w-0 flex-1">
+                      <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                      <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
+                    </div>
+                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                      <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                      </button>
+                      <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              `).join('')}
-            </div>
+                `).join('')}
+              </div>
+            ` : ''}
           </div>
 
-          <!-- Section 3: Papers in Current Folder (Draggable) -->
-          <div class="space-y-0.5">
-            <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex items-center justify-between">
-              <span>In ${folderLabel} (${folderFiles.length})</span>
-            </div>
-
-            ${folderFiles.length === 0 ? `
-              <div class="p-5 text-center border border-dashed border-white/[0.08] rounded-xl bg-zinc-950/20 text-zinc-500">
-                <p class="text-[11px] text-zinc-400">No papers in this folder</p>
-                <p class="text-[10px] text-zinc-600 mt-0.5">Drop PDF to upload or drag papers into folders</p>
+          <!-- Section 3: Papers in Current Folder (Collapsible & Draggable) -->
+          <div class="space-y-1">
+            <!-- Collapsible Header -->
+            <button class="w-full flex items-center justify-between px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-200 uppercase transition rounded hover:bg-white/[0.03] btn-collapse-section" data-section="files">
+              <div class="flex items-center space-x-1.5">
+                <svg class="w-3 h-3 text-zinc-500 transition-transform duration-200 ${isFilesCollapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                <span class="font-semibold">In ${folderLabel} (${folderFiles.length})</span>
               </div>
-            ` : `
-              <div class="space-y-1">
-                ${folderFiles.map(file => {
-                  const isSelected = file.id === this.selectedFileId;
-                  const isFileHidden = Boolean(file.isHidden);
+            </button>
 
-                  return `
-                    <div class="group px-2.5 py-2 rounded-xl transition cursor-grab file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'} ${isFileHidden ? 'opacity-50' : ''}" draggable="true" data-file-id="${file.id}">
-                      <div class="flex items-start justify-between space-x-2">
-                        <div class="flex items-start space-x-2 min-w-0 flex-1">
-                          <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                          <div class="min-w-0 flex-1">
-                            <div class="flex items-center space-x-1.5">
-                              <p class="text-xs font-medium truncate ${isSelected ? 'text-blue-200' : 'text-zinc-200 group-hover:text-zinc-100'}">${file.name}</p>
-                              ${isFileHidden ? `<span class="px-1 py-0.2 rounded bg-zinc-800 text-[9px] font-mono text-zinc-400">hidden</span>` : ''}
+            ${!isFilesCollapsed ? `
+              <div class="space-y-1 pt-0.5">
+                ${folderFiles.length === 0 ? `
+                  <div class="p-5 text-center border border-dashed border-white/[0.08] rounded-xl bg-zinc-950/20 text-zinc-500">
+                    <p class="text-[11px] text-zinc-400">No papers in this folder</p>
+                    <p class="text-[10px] text-zinc-600 mt-0.5">Drop PDF to upload or drag papers into folders</p>
+                  </div>
+                ` : `
+                  <div class="space-y-1">
+                    ${folderFiles.map(file => {
+                      const isSelected = file.id === this.selectedFileId;
+                      const isFileHidden = Boolean(file.isHidden);
+
+                      return `
+                        <div class="group px-2.5 py-2 rounded-xl transition cursor-grab file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'} ${isFileHidden ? 'opacity-50' : ''}" draggable="true" data-file-id="${file.id}">
+                          <div class="flex items-start justify-between space-x-2">
+                            <div class="flex items-start space-x-2 min-w-0 flex-1">
+                              <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                              <div class="min-w-0 flex-1">
+                                <div class="flex items-center space-x-1.5">
+                                  <p class="text-xs font-medium truncate ${isSelected ? 'text-blue-200' : 'text-zinc-200 group-hover:text-zinc-100'}">${file.name}</p>
+                                  ${isFileHidden ? `<span class="px-1 py-0.2 rounded bg-zinc-800 text-[9px] font-mono text-zinc-400">hidden</span>` : ''}
+                                </div>
+                                <div class="flex items-center space-x-1.5 mt-0.5 text-[10px] text-zinc-500">
+                                  <span>${file.pageCount || 1}p</span>
+                                  <span>·</span>
+                                  <span>${(file.size / 1024).toFixed(0)}kb</span>
+                                </div>
+                              </div>
                             </div>
-                            <div class="flex items-center space-x-1.5 mt-0.5 text-[10px] text-zinc-500">
-                              <span>${file.pageCount || 1}p</span>
-                              <span>·</span>
-                              <span>${(file.size / 1024).toFixed(0)}kb</span>
+
+                            <!-- Actions -->
+                            <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                              ${isSelected ? `
+                                <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-close-file" data-file-id="${file.id}" title="Close Document (ปิดหน้านี้)">
+                                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                              ` : ''}
+
+                              <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                              </button>
+
+                              ${isFileHidden ? `
+                                <button class="p-1 hover:bg-emerald-950/40 rounded text-emerald-400 hover:text-emerald-300 btn-unhide-file" data-file-id="${file.id}" title="Show back in sidebar">
+                                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                </button>
+                              ` : `
+                                <button class="p-1 hover:bg-amber-950/40 rounded text-zinc-400 hover:text-amber-400 btn-hide-file" data-file-id="${file.id}" title="Hide from sidebar">
+                                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                                </button>
+                              `}
+
+                              <button class="p-1 hover:bg-rose-900/40 rounded text-zinc-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete Permanently">
+                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                              </button>
                             </div>
                           </div>
                         </div>
+                      `;
+                    }).join('')}
+                  </div>
+                `}
 
-                        <!-- Actions -->
-                        <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                          ${isSelected ? `
-                            <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-close-file" data-file-id="${file.id}" title="Close Document (ปิดหน้านี้)">
-                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                          ` : ''}
-
-                          <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
-                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                          </button>
-
-                          ${isFileHidden ? `
-                            <button class="p-1 hover:bg-emerald-950/40 rounded text-emerald-400 hover:text-emerald-300 btn-unhide-file" data-file-id="${file.id}" title="Show back in sidebar">
-                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                            </button>
-                          ` : `
-                            <button class="p-1 hover:bg-amber-950/40 rounded text-zinc-400 hover:text-amber-400 btn-hide-file" data-file-id="${file.id}" title="Hide from sidebar">
-                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
-                            </button>
-                          `}
-
-                          <button class="p-1 hover:bg-rose-900/40 rounded text-zinc-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete Permanently">
-                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-            `}
-
-            <!-- Hidden Files Drawer Toggle -->
-            ${hiddenCount > 0 ? `
-              <div class="pt-2 px-1 flex items-center justify-between text-[10px] text-zinc-500 font-mono border-t border-white/[0.04]">
-                <span>Hidden (${hiddenCount})</span>
-                <button id="btn-toggle-hidden" class="text-blue-400 hover:text-blue-300 underline font-sans transition">
-                  ${this.showHidden ? 'Hide' : 'Show'}
-                </button>
+                <!-- Hidden Files Drawer Toggle -->
+                ${hiddenCount > 0 ? `
+                  <div class="pt-2 px-1 flex items-center justify-between text-[10px] text-zinc-500 font-mono border-t border-white/[0.04]">
+                    <span>Hidden (${hiddenCount})</span>
+                    <button id="btn-toggle-hidden" class="text-blue-400 hover:text-blue-300 underline font-sans transition">
+                      ${this.showHidden ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                ` : ''}
               </div>
             ` : ''}
           </div>
@@ -376,6 +428,15 @@ export class FileExplorer {
   }
 
   _bindEvents() {
+    // Collapsible Section Toggle Headers
+    this.container.querySelectorAll('.btn-collapse-section').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sectionKey = btn.getAttribute('data-section');
+        this.toggleSection(sectionKey);
+      });
+    });
+
     // Back Button in breadcrumbs
     this.container.querySelector('#btn-folder-back')?.addEventListener('click', () => {
       this.goBackToParent();
