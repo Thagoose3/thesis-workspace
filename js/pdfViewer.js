@@ -602,10 +602,58 @@ export class PDFViewerEngine {
 
   _extractPreciseSelectionRects(range, pageEl) {
     const pageRect = pageEl.getBoundingClientRect();
-    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
+    
+    // Extract exact text nodes intersecting the range (ignore empty whitespace margins)
+    const textNodes = [];
+    const root = range.commonAncestorContainer;
+    const walker = document.createTreeWalker(
+      root.nodeType === Node.TEXT_NODE ? root.parentNode : root,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node = walker.nextNode();
+    while (node) {
+      if (range.intersectsNode(node) && node.textContent.trim().length > 0) {
+        textNodes.push(node);
+      }
+      node = walker.nextNode();
+    }
+
+    const rawRects = [];
+    if (textNodes.length > 0) {
+      textNodes.forEach(tNode => {
+        const subRange = document.createRange();
+        const start = (tNode === range.startContainer) ? range.startOffset : 0;
+        const end = (tNode === range.endContainer) ? range.endOffset : tNode.textContent.length;
+        
+        // Trim leading and trailing whitespace so highlights never extend past actual text
+        const sliceText = tNode.textContent.substring(start, end);
+        const leadingSpaces = (sliceText.match(/^\s+/) || [''])[0].length;
+        const trailingSpaces = (sliceText.match(/\s+$/) || [''])[0].length;
+        
+        const actualStart = start + leadingSpaces;
+        const actualEnd = Math.max(actualStart, end - trailingSpaces);
+        
+        if (actualEnd > actualStart) {
+          subRange.setStart(tNode, actualStart);
+          subRange.setEnd(tNode, actualEnd);
+          Array.from(subRange.getClientRects()).forEach(r => {
+            if (r.width > 1 && r.height > 1) {
+              rawRects.push(r);
+            }
+          });
+        }
+      });
+    } else {
+      Array.from(range.getClientRects()).forEach(r => {
+        if (r.width > 2 && r.height > 2) rawRects.push(r);
+      });
+    }
+
     if (!rawRects.length) return [];
 
-    // Group rects into lines (tolerance 6px)
+    // Group rects into lines by vertical alignment (tolerance 6px)
     const lines = [];
     rawRects.forEach(rect => {
       const matchedLine = lines.find(l => Math.abs(l.top - rect.top) < 6);
@@ -1037,6 +1085,51 @@ export class PDFViewerEngine {
         ctx.stroke();
 
         this.currentDrawingPath.push({ x: curX, y: curY });
+      } else if (this.activeTool === 'rect') {
+        // Redraw existing saved drawings + live dashed preview box & dimension badge
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
+        pageDrawings.forEach(m => this._renderDrawing(drawingCanvas, m));
+
+        const x = Math.min(startX, curX);
+        const y = Math.min(startY, curY);
+        const w = Math.abs(curX - startX);
+        const h = Math.abs(curY - startY);
+
+        // Dashed preview box with soft translucent fill
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = this.activeColor;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.fillRect(x, y, w, h);
+
+        // Live Dimension Badge (e.g. 180 × 95 px)
+        if (w > 20 || h > 20) {
+          ctx.setLineDash([]);
+          const badgeText = `${Math.round(w)} × ${Math.round(h)} px`;
+          ctx.font = '500 10px Inter, -apple-system, sans-serif';
+          const textMetrics = ctx.measureText(badgeText);
+          const badgeW = textMetrics.width + 12;
+          const badgeH = 18;
+          const badgeX = Math.min(rect.width - badgeW - 6, Math.max(6, curX + 10));
+          const badgeY = Math.min(rect.height - badgeH - 6, Math.max(6, curY + 12));
+
+          ctx.fillStyle = 'rgba(9, 9, 11, 0.9)';
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = '#f4f4f5';
+          ctx.fillText(badgeText, badgeX + 6, badgeY + 12.5);
+        }
+        ctx.restore();
       }
     };
 
@@ -1055,10 +1148,6 @@ export class PDFViewerEngine {
         const h = Math.abs(endY - startY);
 
         if (w > 10 && h > 10) {
-          ctx.strokeStyle = this.activeColor;
-          ctx.lineWidth = this.activeStrokeWidth;
-          ctx.strokeRect(x, y, w, h);
-
           const markup = createMarkupItem({
             fileId: this.currentFile.id,
             pageNumber: pageNum,
@@ -1076,6 +1165,9 @@ export class PDFViewerEngine {
           await db.saveMarkup(markup);
           this.markups.push(markup);
         }
+
+        // Redraw page cleanly without dashed preview and badge
+        this._redrawPageCanvas(pageNum);
       } else if (this.activeTool === 'pen' && this.currentDrawingPath.length >= 1) {
         const markup = createMarkupItem({
           fileId: this.currentFile.id,
@@ -1106,7 +1198,10 @@ export class PDFViewerEngine {
     el.id = `markup-${markup.id}`;
     el.style.left = `${markup.x * 100}%`;
     el.style.top = `${markup.y * 100}%`;
-    el.style.width = `${markup.width * 100}%`;
+    el.style.width = `${(markup.width || 0.28) * 100}%`;
+    if (markup.height) {
+      el.style.height = `${markup.height * 100}%`;
+    }
     el.style.backgroundColor = markup.data.bgColor || '#fef08a';
     el.style.color = markup.data.textColor || '#18181b';
 
@@ -1123,6 +1218,11 @@ export class PDFViewerEngine {
         </button>
       </div>
       <textarea class="tb-input" rows="2" style="font-size: ${markup.data.fontSize || 12}px">${markup.data.text || ''}</textarea>
+      
+      <!-- Resizable Corner Handle -->
+      <div class="tb-resize-handle" title="Drag to resize (ลากปรับขนาดได้ตามต้องการ)">
+        <svg class="w-2.5 h-2.5 text-black/40" viewBox="0 0 24 24" fill="currentColor"><path d="M22 22H20V20H22V22ZM22 16H20V18H22V16ZM18 20H16V22H18V20ZM22 12H20V14H22V12ZM14 20H12V22H14V20ZM18 16H16V18H18V16Z"/></svg>
+      </div>
     `;
 
     markupLayer.appendChild(el);
@@ -1156,7 +1256,45 @@ export class PDFViewerEngine {
       this.onMarkupDeleted(markup.id);
     });
 
+    // Make Draggable
     this._makeDraggable(el, pageContainer, markup);
+
+    // Make Resizable
+    const resizeHandle = el.querySelector('.tb-resize-handle');
+    if (resizeHandle) {
+      let isResizing = false;
+      let startW = 0, startH = 0, startMouseX = 0, startMouseY = 0;
+
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        isResizing = true;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        startW = el.offsetWidth;
+        startH = el.offsetHeight;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const pageRect = pageContainer.getBoundingClientRect();
+        const newW = Math.max(90, Math.min(pageRect.width - el.offsetLeft, startW + (e.clientX - startMouseX)));
+        const newH = Math.max(44, Math.min(pageRect.height - el.offsetTop, startH + (e.clientY - startMouseY)));
+
+        el.style.width = `${newW}px`;
+        el.style.height = `${newH}px`;
+
+        markup.width = newW / pageRect.width;
+        markup.height = newH / pageRect.height;
+      });
+
+      window.addEventListener('mouseup', async () => {
+        if (isResizing) {
+          isResizing = false;
+          await db.saveMarkup(markup);
+        }
+      });
+    }
   }
 
   _renderImageBox(pageContainer, markup) {

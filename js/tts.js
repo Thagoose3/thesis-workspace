@@ -170,10 +170,10 @@ class TTSEngine {
       if (thaiVoice) this.currentUtterance.voice = thaiVoice;
       
       // Tone: AI ผู้หญิงใจเย็น สุขุม ฉลาด ประสานงานข้างหู
-      // Pitch: 0.98 - 1.0 (โทนเสียงสงบนิ่ง สบายหู ไม่แหลม ไม่สังเคราะห์เกินไป)
-      // Rate: 0.96 (จังหวะพอดีๆ ไม่เร่งรีบ สุขุม ชัดถ้อยชัดคำ)
+      // Pitch: 1.0 (โทนเสียงสงบนิ่ง สบายหู)
+      // Rate: 0.88 (จังหวะช้าลง นุ่มนวล ชัดถ้อยชัดคำ ไม่เร่งรีบ)
       this.currentUtterance.pitch = 1.0;
-      this.currentUtterance.rate = this.rate * 0.97;
+      this.currentUtterance.rate = this.rate * 0.88;
     } else {
       this.currentUtterance.lang = 'en-GB';
       const fridayVoice = this.getEnglishFridayVoice();
