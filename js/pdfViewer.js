@@ -1,7 +1,7 @@
 /**
  * PDF Viewer & Comprehensive Interactive Annotation / Markup Engine for ThesisMind
- * Supports: Real PDF.js Canvas & Text Layer, Multi-color Highlighting,
- * Custom Sticky Text Boxes, Image/Figure Insertion, Freehand Pen Drawing, and Shapes.
+ * Features: Multi-color Highlighting, Text Boxes, Image Insertion,
+ * Freehand Pen, Shapes, Eraser Tool, Undo, and Page Drawing Clear.
  */
 
 import { HighlightColors, MarkupColors, PaperThemes, createHighlight, createSideNote, createMarkupItem } from './models.js';
@@ -21,7 +21,7 @@ export class PDFViewerEngine {
     this.highlights = [];
     this.markups = [];
     
-    // Active tool mode: 'select' | 'highlight' | 'textbox' | 'image' | 'pen' | 'rect'
+    // Active tool: 'select' | 'textbox' | 'image' | 'pen' | 'rect' | 'eraser'
     this.activeTool = 'select';
     this.activeColor = '#facc15';
     this.activeStrokeWidth = 2.5;
@@ -55,19 +55,19 @@ export class PDFViewerEngine {
     
     this.markupDock.innerHTML = `
       <!-- Tool Buttons -->
-      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="select" title="Cursor / Text Select (V)">
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="select" title="Cursor / Select (V)">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
         <span class="hidden sm:inline text-[11px]">Select</span>
       </button>
 
       <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="textbox" title="Add Sticky Text Box (T)">
         <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
-        <span class="hidden sm:inline text-[11px]">Text Box</span>
+        <span class="hidden sm:inline text-[11px]">Text</span>
       </button>
 
-      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="image" title="Insert Image / Figure (I)">
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="image" title="Insert Image / Figure">
         <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-        <span class="hidden sm:inline text-[11px]">Add Image</span>
+        <span class="hidden sm:inline text-[11px]">Image</span>
       </button>
 
       <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="pen" title="Freehand Pen (P)">
@@ -80,6 +80,17 @@ export class PDFViewerEngine {
         <span class="hidden sm:inline text-[11px]">Box</span>
       </button>
 
+      <!-- Eraser Tool (ยางลบ) -->
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-rose-300 hover:bg-rose-950/40 active:scale-95" data-tool="eraser" title="Eraser (E) - Click/Drag over drawing to erase">
+        <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        <span class="hidden sm:inline text-[11px]">Eraser</span>
+      </button>
+
+      <!-- Undo Drawing Button -->
+      <button id="btn-undo-drawing" class="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition" title="Undo Drawing (Ctrl+Z)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2m0 0l-3-3m3 3l3-3M3 10l3-3m-3 3l3 3"/></svg>
+      </button>
+
       <!-- Color Swatches -->
       <div class="flex items-center space-x-1 pl-1.5 border-l border-white/[0.08]">
         ${MarkupColors.slice(0, 5).map(c => `
@@ -87,7 +98,6 @@ export class PDFViewerEngine {
         `).join('')}
       </div>
 
-      <!-- Hidden file input for Image Upload -->
       <input type="file" id="markup-image-input" accept="image/*" class="hidden" />
     `;
 
@@ -101,7 +111,6 @@ export class PDFViewerEngine {
       btn.addEventListener('click', () => {
         const tool = btn.getAttribute('data-tool');
         if (tool === 'image') {
-          // Trigger file picker
           const imgInput = this.markupDock.querySelector('#markup-image-input');
           if (imgInput) imgInput.click();
         } else {
@@ -118,7 +127,12 @@ export class PDFViewerEngine {
       });
     });
 
-    // Handle Image file input
+    // Undo Drawing
+    this.markupDock.querySelector('#btn-undo-drawing')?.addEventListener('click', async () => {
+      await this.undoLastDrawing();
+    });
+
+    // Image Upload
     const imgInput = this.markupDock.querySelector('#markup-image-input');
     if (imgInput) {
       imgInput.addEventListener('change', async (e) => {
@@ -126,8 +140,7 @@ export class PDFViewerEngine {
           const file = e.target.files[0];
           const reader = new FileReader();
           reader.onload = async (event) => {
-            const dataUrl = event.target.result;
-            await this.insertImageOnPage(this.currentPage, dataUrl, file.name);
+            await this.insertImageOnPage(this.currentPage, event.target.result, file.name);
             imgInput.value = '';
           };
           reader.readAsDataURL(file);
@@ -135,12 +148,17 @@ export class PDFViewerEngine {
       });
     }
 
-    // Keyboard Shortcuts (V, T, P, S)
+    // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'v' || e.key === 'V') this.setTool('select');
       if (e.key === 't' || e.key === 'T') this.setTool('textbox');
       if (e.key === 'p' || e.key === 'P') this.setTool('pen');
+      if (e.key === 'e' || e.key === 'E') this.setTool('eraser');
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        this.undoLastDrawing();
+      }
     });
   }
 
@@ -175,14 +193,41 @@ export class PDFViewerEngine {
       }
     });
 
-    // Update drawing layer interaction
     const drawingCanvases = this.container.querySelectorAll('.drawing-canvas');
     drawingCanvases.forEach(c => {
-      if (tool === 'pen' || tool === 'rect') {
+      if (tool === 'pen' || tool === 'rect' || tool === 'eraser') {
         c.classList.add('active');
+        c.style.cursor = tool === 'eraser' ? 'cell' : 'crosshair';
       } else {
         c.classList.remove('active');
+        c.style.cursor = 'default';
       }
+    });
+  }
+
+  async undoLastDrawing() {
+    if (!this.currentFile) return;
+    const pageDrawings = this.markups.filter(m => m.pageNumber === this.currentPage && m.type === 'drawing');
+    if (pageDrawings.length > 0) {
+      const last = pageDrawings[pageDrawings.length - 1];
+      await db.deleteMarkup(last.id);
+      this.markups = this.markups.filter(m => m.id !== last.id);
+      this._redrawPageCanvas(this.currentPage);
+    }
+  }
+
+  _redrawPageCanvas(pageNum) {
+    const pageContainer = document.getElementById(`page-${pageNum}`);
+    if (!pageContainer) return;
+    const canvas = pageContainer.querySelector('.drawing-canvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const pageMarkups = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
+    pageMarkups.forEach(m => {
+      this._renderDrawing(canvas, m);
     });
   }
 
@@ -190,7 +235,6 @@ export class PDFViewerEngine {
     this.selectionToolbar = document.createElement('div');
     this.selectionToolbar.className = 'floating-toolbar fixed z-50 hidden minimal-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-white/[0.1] text-xs';
     
-    // Highlight colors
     const colorsContainer = document.createElement('div');
     colorsContainer.className = 'flex items-center space-x-1 pr-1.5 border-r border-white/[0.08]';
 
@@ -206,7 +250,6 @@ export class PDFViewerEngine {
       colorsContainer.appendChild(btn);
     });
 
-    // Note button
     const noteBtn = document.createElement('button');
     noteBtn.className = 'px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white font-medium flex items-center space-x-1 transition';
     noteBtn.innerHTML = `<span>Note</span>`;
@@ -215,7 +258,6 @@ export class PDFViewerEngine {
       this._applyHighlightAndNote();
     });
 
-    // TTS button
     const ttsBtn = document.createElement('button');
     ttsBtn.className = 'px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white font-medium flex items-center space-x-1 transition';
     ttsBtn.innerHTML = `<span>Read</span>`;
@@ -554,14 +596,14 @@ export class PDFViewerEngine {
     highlightLayer.className = 'highlight-layer absolute top-0 left-0 w-full h-full pointer-events-none z-[3]';
     pageContainer.appendChild(highlightLayer);
 
-    // Interactive Markup Layer (Text boxes, Images, Figures)
+    // Interactive Markup Layer
     const markupLayer = document.createElement('div');
     markupLayer.className = 'markup-layer';
     pageContainer.appendChild(markupLayer);
 
-    // Drawing Canvas Layer (Pen & Shapes)
+    // Drawing Canvas Layer
     const drawingCanvas = document.createElement('canvas');
-    drawingCanvas.className = `drawing-canvas ${this.activeTool === 'pen' || this.activeTool === 'rect' ? 'active' : ''}`;
+    drawingCanvas.className = `drawing-canvas ${this.activeTool === 'pen' || this.activeTool === 'rect' || this.activeTool === 'eraser' ? 'active' : ''}`;
     drawingCanvas.width = widthPx;
     drawingCanvas.height = heightPx;
     pageContainer.appendChild(drawingCanvas);
@@ -589,13 +631,13 @@ export class PDFViewerEngine {
       }).promise;
     }
 
-    // Render existing highlights
+    // Render Highlights
     const pageHighlights = this.highlights.filter(h => h.pageNumber === pageNum);
     pageHighlights.forEach(hl => {
       this._renderHighlightOnPage(pageContainer, hl);
     });
 
-    // Render existing Markups (Textboxes, Images)
+    // Render Markups
     const pageMarkups = this.markups.filter(m => m.pageNumber === pageNum);
     pageMarkups.forEach(m => {
       if (m.type === 'textbox') this._renderTextBox(pageContainer, m);
@@ -603,7 +645,6 @@ export class PDFViewerEngine {
       if (m.type === 'drawing') this._renderDrawing(drawingCanvas, m);
     });
 
-    // Setup interactive events on pageContainer
     this._bindPageMarkupEvents(pageContainer, drawingCanvas, pageNum);
   }
 
@@ -632,7 +673,6 @@ export class PDFViewerEngine {
   }
 
   _bindPageMarkupEvents(pageContainer, drawingCanvas, pageNum) {
-    // Click on page in 'textbox' mode to place a new Text Box
     pageContainer.addEventListener('click', async (e) => {
       if (this.activeTool === 'textbox') {
         if (e.target.closest('.markup-textbox') || e.target.closest('.markup-image-box')) return;
@@ -664,25 +704,93 @@ export class PDFViewerEngine {
       }
     });
 
-    // Drawing Canvas events for Pen / Box mode
     const ctx = drawingCanvas.getContext('2d');
     let startX = 0;
     let startY = 0;
 
-    const startDraw = (e) => {
+    const startDraw = async (e) => {
+      const rect = drawingCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Handle ERASER tool
+      if (this.activeTool === 'eraser') {
+        const normX = clickX / rect.width;
+        const normY = clickY / rect.height;
+
+        // Find drawing markup near click
+        const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
+        for (const m of pageDrawings) {
+          let hit = false;
+          if (m.data.shapeType === 'rect') {
+            if (normX >= m.x && normX <= m.x + m.width && normY >= m.y && normY <= m.y + m.height) {
+              hit = true;
+            }
+          } else if (m.data.paths) {
+            for (const p of m.data.paths) {
+              const dx = Math.abs(p.x - normX) * rect.width;
+              const dy = Math.abs(p.y - normY) * rect.height;
+              if (Math.sqrt(dx * dx + dy * dy) < 20) {
+                hit = true;
+                break;
+              }
+            }
+          }
+
+          if (hit) {
+            await db.deleteMarkup(m.id);
+            this.markups = this.markups.filter(item => item.id !== m.id);
+            this._redrawPageCanvas(pageNum);
+            break;
+          }
+        }
+        return;
+      }
+
       if (this.activeTool !== 'pen' && this.activeTool !== 'rect') return;
       this.isDrawing = true;
-      const rect = drawingCanvas.getBoundingClientRect();
-      startX = e.clientX - rect.left;
-      startY = e.clientY - rect.top;
+      startX = clickX;
+      startY = clickY;
       this.currentDrawingPath = [{ x: startX, y: startY }];
     };
 
-    const drawMove = (e) => {
-      if (!this.isDrawing) return;
+    const drawMove = async (e) => {
       const rect = drawingCanvas.getBoundingClientRect();
       const curX = e.clientX - rect.left;
       const curY = e.clientY - rect.top;
+
+      // Eraser drag support
+      if (this.activeTool === 'eraser' && (e.buttons === 1)) {
+        const normX = curX / rect.width;
+        const normY = curY / rect.height;
+        const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
+        for (const m of pageDrawings) {
+          let hit = false;
+          if (m.data.shapeType === 'rect') {
+            if (normX >= m.x && normX <= m.x + m.width && normY >= m.y && normY <= m.y + m.height) {
+              hit = true;
+            }
+          } else if (m.data.paths) {
+            for (const p of m.data.paths) {
+              const dx = Math.abs(p.x - normX) * rect.width;
+              const dy = Math.abs(p.y - normY) * rect.height;
+              if (Math.sqrt(dx * dx + dy * dy) < 18) {
+                hit = true;
+                break;
+              }
+            }
+          }
+          if (hit) {
+            await db.deleteMarkup(m.id);
+            this.markups = this.markups.filter(item => item.id !== m.id);
+            this._redrawPageCanvas(pageNum);
+            break;
+          }
+        }
+        return;
+      }
+
+      if (!this.isDrawing) return;
 
       if (this.activeTool === 'pen') {
         ctx.strokeStyle = this.activeColor;
@@ -709,7 +817,6 @@ export class PDFViewerEngine {
       const endY = e.clientY - rect.top;
 
       if (this.activeTool === 'rect') {
-        // Draw rectangle
         const x = Math.min(startX, endX);
         const y = Math.min(startY, endY);
         const w = Math.abs(endX - startX);
@@ -794,13 +901,11 @@ export class PDFViewerEngine {
       textarea.select();
     }
 
-    // Auto-save on typing
     textarea.addEventListener('input', () => {
       markup.data.text = textarea.value;
       db.saveMarkup(markup);
     });
 
-    // Change color
     el.querySelectorAll('.btn-tb-color').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -811,7 +916,6 @@ export class PDFViewerEngine {
       });
     });
 
-    // Delete Textbox
     el.querySelector('.btn-delete-markup')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       await db.deleteMarkup(markup.id);
@@ -820,7 +924,6 @@ export class PDFViewerEngine {
       this.onMarkupDeleted(markup.id);
     });
 
-    // Dragging mechanism
     this._makeDraggable(el, pageContainer, markup);
   }
 

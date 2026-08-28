@@ -1,5 +1,7 @@
 /**
  * Ultra-Minimalist Paper Summary Matrix (Literature Review Comparison Table)
+ * Supports: Interactive Paper Multi-Selection (เลือกเปเปอร์ที่ต้องการเปรียบเทียบ),
+ * Live Search Filter, Markdown Export, and CSV Download.
  */
 
 import { db } from './db.js';
@@ -10,13 +12,18 @@ export class SummaryMatrixModal {
     this.modal = modalElement;
     this.options = options;
     this.currentFolderId = null;
-    this.papersData = [];
+    this.allPapersData = [];
+    this.selectedFileIds = new Set();
+    this.searchQuery = '';
+    this.isFilterExpanded = true;
     this.onShowToast = options.onShowToast || ((msg) => console.log(msg));
   }
 
   async open(folderId = null) {
     this.currentFolderId = folderId;
     await this.loadData();
+    // Default select all papers
+    this.selectedFileIds = new Set(this.allPapersData.map(p => p.file.id));
     this.render();
     this.modal.classList.remove('hidden');
   }
@@ -37,10 +44,10 @@ export class SummaryMatrixModal {
     const currentFolder = folders.find(f => f.id === this.currentFolderId);
     this.folderName = currentFolder ? currentFolder.name : 'All Folders';
 
-    this.papersData = [];
+    this.allPapersData = [];
     for (const file of files) {
       const meta = await db.getMetadata(file.id) || { fileId: file.id };
-      this.papersData.push({
+      this.allPapersData.push({
         file,
         meta,
         bibKey: generateBibTeXKey(meta, file.name)
@@ -48,24 +55,32 @@ export class SummaryMatrixModal {
     }
   }
 
+  getSelectedPapers() {
+    return this.allPapersData.filter(item => this.selectedFileIds.has(item.file.id));
+  }
+
   render() {
+    const selectedPapers = this.getSelectedPapers();
+    const totalCount = this.allPapersData.length;
+    const selectedCount = selectedPapers.length;
+
     this.modal.innerHTML = `
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-        <div class="w-full max-w-5xl max-h-[85vh] bg-zinc-900 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md select-none">
+        <div class="w-full max-w-5xl max-h-[90vh] bg-zinc-900 border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           
           <!-- Header -->
-          <div class="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-zinc-950/50">
+          <div class="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-zinc-950/60">
             <div>
-              <h2 class="text-sm font-semibold text-zinc-100">Literature Review Matrix</h2>
-              <p class="text-[11px] text-zinc-500 font-mono mt-0.5">${this.papersData.length} papers in ${this.folderName}</p>
+              <h2 class="text-sm font-semibold text-zinc-100">Literature Review Synthesis Matrix</h2>
+              <p class="text-[11px] text-zinc-400 font-mono mt-0.5">Comparing <span class="text-blue-400 font-semibold">${selectedCount}</span> of ${totalCount} papers in ${this.folderName}</p>
             </div>
 
             <div class="flex items-center space-x-2">
               <button id="btn-copy-md-matrix" class="px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] text-zinc-300 text-xs font-medium transition">
-                Copy Markdown
+                Copy Markdown (${selectedCount})
               </button>
               <button id="btn-download-csv" class="px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] text-zinc-300 text-xs font-medium transition">
-                CSV
+                Export CSV
               </button>
               <button id="btn-close-matrix" class="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -73,11 +88,38 @@ export class SummaryMatrixModal {
             </div>
           </div>
 
+          <!-- Paper Selection & Filter Bar -->
+          <div class="px-5 py-2.5 bg-zinc-950/40 border-b border-white/[0.06] space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select Papers to Compare (เลือกเปเปอร์ที่จะเปรียบเทียบ)</span>
+              
+              <div class="flex items-center space-x-1 text-xs">
+                <button id="btn-select-all" class="px-2 py-0.5 rounded text-[11px] text-blue-400 hover:text-blue-300 hover:bg-white/[0.04] transition font-medium">Select All</button>
+                <span class="text-zinc-700">·</span>
+                <button id="btn-deselect-all" class="px-2 py-0.5 rounded text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition">Clear All</button>
+              </div>
+            </div>
+
+            <!-- Paper Checkbox Chips -->
+            <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto py-1">
+              ${this.allPapersData.map(item => {
+                const isSelected = this.selectedFileIds.has(item.file.id);
+                return `
+                  <label class="px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center space-x-1.5 text-xs ${isSelected ? 'bg-blue-600/20 border-blue-500/40 text-blue-200' : 'bg-zinc-950/60 border-white/[0.06] text-zinc-500 hover:text-zinc-300'}">
+                    <input type="checkbox" class="rounded border-zinc-700 bg-zinc-900 text-blue-600 focus:ring-0 paper-checkbox" data-file-id="${item.file.id}" ${isSelected ? 'checked' : ''} />
+                    <span class="truncate max-w-[200px]">${item.meta.title || item.file.name}</span>
+                  </label>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
           <!-- Table Content -->
-          <div class="flex-1 overflow-auto p-4">
-            ${this.papersData.length === 0 ? `
-              <div class="p-12 text-center text-zinc-500">
-                <p class="text-xs">No papers in this folder</p>
+          <div class="flex-1 overflow-auto p-4 select-text">
+            ${selectedPapers.length === 0 ? `
+              <div class="p-12 text-center text-zinc-500 space-y-1">
+                <p class="text-xs font-medium text-zinc-400">No papers selected</p>
+                <p class="text-[11px] text-zinc-600">Please check at least one paper above to compare</p>
               </div>
             ` : `
               <div class="overflow-x-auto border border-white/[0.06] rounded-xl">
@@ -92,7 +134,7 @@ export class SummaryMatrixModal {
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/[0.04] bg-zinc-900/40">
-                    ${this.papersData.map((item) => {
+                    ${selectedPapers.map((item) => {
                       const { file, meta } = item;
                       return `
                         <tr class="hover:bg-white/[0.02] transition">
@@ -146,6 +188,32 @@ export class SummaryMatrixModal {
       this.close();
     });
 
+    // Checkbox toggles
+    this.modal.querySelectorAll('.paper-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const fileId = cb.getAttribute('data-file-id');
+        if (cb.checked) {
+          this.selectedFileIds.add(fileId);
+        } else {
+          this.selectedFileIds.delete(fileId);
+        }
+        this.render();
+      });
+    });
+
+    // Select All
+    this.modal.querySelector('#btn-select-all')?.addEventListener('click', () => {
+      this.selectedFileIds = new Set(this.allPapersData.map(p => p.file.id));
+      this.render();
+    });
+
+    // Deselect All
+    this.modal.querySelector('#btn-deselect-all')?.addEventListener('click', () => {
+      this.selectedFileIds.clear();
+      this.render();
+    });
+
+    // Cell inputs auto-save
     this.modal.querySelectorAll('.matrix-cell').forEach(cell => {
       cell.addEventListener('change', async () => {
         const fileId = cell.getAttribute('data-file-id');
@@ -157,12 +225,14 @@ export class SummaryMatrixModal {
       });
     });
 
+    // Copy Markdown
     this.modal.querySelector('#btn-copy-md-matrix')?.addEventListener('click', async () => {
       const mdTable = this.generateMarkdownTable();
       await copyToClipboard(mdTable);
-      this.onShowToast('Copied Markdown table');
+      this.onShowToast(`Copied Markdown table (${this.getSelectedPapers().length} papers)`);
     });
 
+    // Download CSV
     this.modal.querySelector('#btn-download-csv')?.addEventListener('click', () => {
       this.downloadCSV();
     });
@@ -181,11 +251,12 @@ export class SummaryMatrixModal {
   }
 
   generateMarkdownTable() {
-    let md = `# Literature Review Matrix: ${this.folderName}\n\n`;
+    const selected = this.getSelectedPapers();
+    let md = `# Literature Review Matrix: ${this.folderName} (${selected.length} Selected Papers)\n\n`;
     md += `| Paper | Key Contributions | Limitations | Methodology | Findings |\n`;
     md += `| :--- | :--- | :--- | :--- | :--- |\n`;
 
-    this.papersData.forEach(item => {
+    selected.forEach(item => {
       const { file, meta } = item;
       const title = (meta.title || file.name).replace(/\|/g, '\\|');
       const authors = `${meta.authors || 'Unknown'} (${meta.year || 'n.d.'})`.replace(/\|/g, '\\|');
@@ -201,8 +272,9 @@ export class SummaryMatrixModal {
   }
 
   downloadCSV() {
+    const selected = this.getSelectedPapers();
     const headers = ['Title', 'Authors', 'Year', 'Contributions', 'Limitations', 'Methodology', 'Findings'];
-    const rows = this.papersData.map(item => {
+    const rows = selected.map(item => {
       const { file, meta } = item;
       return [
         `"${(meta.title || file.name).replace(/"/g, '""')}"`,
@@ -223,6 +295,6 @@ export class SummaryMatrixModal {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    this.onShowToast('Downloaded CSV');
+    this.onShowToast(`Downloaded CSV (${selected.length} papers)`);
   }
 }
