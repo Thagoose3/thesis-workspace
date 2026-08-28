@@ -35,6 +35,21 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* Drag and Drop Visual Feedback */
+.file-item[draggable="true"] {
+  cursor: grab;
+}
+.file-item.dragging {
+  opacity: 0.4 !important;
+  transform: scale(0.98);
+}
+
+.folder-item.drag-over, .btn-breadcrumb.drag-over {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  outline: 1.5px dashed #3b82f6 !important;
+  border-radius: 8px;
+}
+
 /* PDF Page Container Aspect Ratio & Shadows */
 .pdf-page-container {
   flex-shrink: 0 !important;

@@ -1,8 +1,10 @@
 /**
- * Ultra-Minimalist File Explorer & Folder Tree Component
- * Clean, distraction-free document tree inspired by Notion / Linear.
- * Features: Subfolders, Tags, Drag-and-drop, Rename, Move, Delete,
- * and "Hide from Sidebar / Archive" with Restore option.
+ * Ultra-Minimalist File Explorer & Document Tree for ThesisMind
+ * Features:
+ * - Native Drag & Drop Moving (ลากไฟล์เปเปอร์ไปวางใส่โฟลเดอร์ได้ทันที)
+ * - Recent / Active Reading List with 1-click Close (แถบ Recent สำหรับเปเปอร์ที่กำลังเปิดอ่าน/เปิดล่าสุด)
+ * - Close button on paper items to close/unload reader
+ * - Subfolders, Breadcrumbs, Tags, Rename, Delete, Hide/Archive.
  */
 
 import { db } from './db.js';
@@ -16,14 +18,53 @@ export class FileExplorer {
     this.activeTag = null;
     this.folders = [];
     this.files = [];
+    this.recentFileIds = [];
     this.selectedFileId = null;
-    this.showHidden = false; // Toggle to view hidden papers
+    this.showHidden = false;
+    this.draggedFileId = null;
     
     this.onFileSelect = options.onFileSelect || (() => {});
+    this.onFileClose = options.onFileClose || (() => {});
     this.onFolderChange = options.onFolderChange || (() => {});
     this.onOpenMatrix = options.onOpenMatrix || (() => {});
     this.onExportFolder = options.onExportFolder || (() => {});
     this.onShowToast = options.onShowToast || ((msg) => console.log(msg));
+
+    this._loadRecentFromStorage();
+  }
+
+  _loadRecentFromStorage() {
+    try {
+      const stored = localStorage.getItem('thesismind_recent_files');
+      if (stored) {
+        this.recentFileIds = JSON.parse(stored);
+      }
+    } catch (e) {
+      this.recentFileIds = [];
+    }
+  }
+
+  _saveRecentToStorage() {
+    try {
+      localStorage.setItem('thesismind_recent_files', JSON.stringify(this.recentFileIds));
+    } catch (e) {}
+  }
+
+  addToRecent(fileId) {
+    if (!fileId) return;
+    this.recentFileIds = [fileId, ...this.recentFileIds.filter(id => id !== fileId)].slice(0, 10);
+    this._saveRecentToStorage();
+    this.render();
+  }
+
+  removeFromRecent(fileId) {
+    this.recentFileIds = this.recentFileIds.filter(id => id !== fileId);
+    this._saveRecentToStorage();
+    if (this.selectedFileId === fileId) {
+      this.selectedFileId = null;
+      this.onFileClose();
+    }
+    this.render();
   }
 
   async init() {
@@ -73,7 +114,6 @@ export class FileExplorer {
   getFilteredFiles() {
     let list = this.files;
     
-    // Filter by folder or tag
     if (this.activeTag) {
       list = list.filter(f => f.tags && f.tags.includes(this.activeTag));
     } else if (this.currentFolderId !== null) {
@@ -82,7 +122,6 @@ export class FileExplorer {
       list = list.filter(f => f.folderId === null);
     }
 
-    // Filter hidden unless showHidden is true
     if (!this.showHidden) {
       list = list.filter(f => !f.isHidden);
     }
@@ -101,17 +140,27 @@ export class FileExplorer {
     return this.files.filter(f => f.isHidden && f.folderId === this.currentFolderId).length;
   }
 
+  getRecentFiles() {
+    return this.recentFileIds
+      .map(id => this.files.find(f => f.id === id))
+      .filter(Boolean);
+  }
+
   render() {
     const breadcrumbPath = this.getBreadcrumbPath(this.currentFolderId);
     const subfolders = this.getCurrentFolderChildren();
-    const files = this.getFilteredFiles();
+    const folderFiles = this.getFilteredFiles();
+    const recentFiles = this.getRecentFiles();
     const allTags = this.getAllTags();
     const hiddenCount = this.getHiddenCount();
+
+    const curFolder = this.folders.find(f => f.id === this.currentFolderId);
+    const folderLabel = curFolder ? curFolder.name : 'Root';
 
     this.container.innerHTML = `
       <div class="h-full flex flex-col bg-zinc-900 text-zinc-300 border-r border-white/[0.06] select-none">
         
-        <!-- Header: Minimal Title + Action Icons -->
+        <!-- Top Header: Title + Actions -->
         <div class="px-3.5 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
           <span class="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Explorer</span>
 
@@ -125,20 +174,20 @@ export class FileExplorer {
           </div>
         </div>
 
-        <!-- Breadcrumb / Path -->
+        <!-- Breadcrumb / Path (Drop target for Root & Parent folders) -->
         <div class="px-3 py-1.5 border-b border-white/[0.04] bg-zinc-950/40 flex items-center space-x-1 text-[11px] overflow-x-auto whitespace-nowrap">
-          <button class="btn-breadcrumb text-zinc-500 hover:text-zinc-300 transition font-medium" data-folder-id="root">
+          <button class="btn-breadcrumb text-zinc-500 hover:text-zinc-300 transition font-medium px-1 rounded hover:bg-white/[0.04]" data-folder-id="root">
             Root
           </button>
           ${breadcrumbPath.map(f => `
             <span class="text-zinc-700">/</span>
-            <button class="btn-breadcrumb font-medium transition truncate max-w-[100px] ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-zinc-400 hover:text-zinc-200'}" data-folder-id="${f.id}">
+            <button class="btn-breadcrumb font-medium transition truncate max-w-[100px] px-1 rounded ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'}" data-folder-id="${f.id}">
               ${f.name}
             </button>
           `).join('')}
         </div>
 
-        <!-- Minimal Tag Pills -->
+        <!-- Tag Pills -->
         ${allTags.length > 0 ? `
           <div class="px-3 py-1.5 border-b border-white/[0.04] flex items-center space-x-1 overflow-x-auto text-[10px]">
             ${allTags.map(tag => `
@@ -149,51 +198,89 @@ export class FileExplorer {
           </div>
         ` : ''}
 
-        <!-- Main Tree Content -->
-        <div class="flex-1 overflow-y-auto p-2 space-y-3" id="drop-zone">
+        <!-- Main Scrollable Content -->
+        <div class="flex-1 overflow-y-auto p-2 space-y-3.5" id="drop-zone">
           
-          <!-- Subfolders -->
-          ${subfolders.length > 0 && !this.activeTag ? `
-            <div class="space-y-0.5">
-              <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1">Folders</div>
-              ${subfolders.map(f => `
-                <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
-                  <div class="flex items-center space-x-2 min-w-0 flex-1">
-                    <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-                    <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
-                  </div>
-                  <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                    <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                    </button>
-                    <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
+          <!-- Section 1: Recent / Opened Papers -->
+          ${recentFiles.length > 0 ? `
+            <div class="space-y-1">
+              <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 flex items-center justify-between">
+                <span>Recent (${recentFiles.length})</span>
+                <span class="text-[8px] text-zinc-600">Active</span>
+              </div>
+
+              <div class="space-y-0.5">
+                ${recentFiles.map(file => {
+                  const isSelected = file.id === this.selectedFileId;
+                  return `
+                    <div class="group px-2 py-1.5 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/20 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'}" draggable="true" data-file-id="${file.id}">
+                      <div class="flex items-center justify-between space-x-1.5">
+                        <div class="flex items-center space-x-1.5 min-w-0 flex-1">
+                          <svg class="w-3.5 h-3.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                          <p class="text-xs truncate ${isSelected ? 'text-blue-200 font-medium' : 'text-zinc-200'}">${file.name}</p>
+                        </div>
+
+                        <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 opacity-0 group-hover:opacity-100 transition btn-close-recent" data-file-id="${file.id}" title="Close / Remove from Recent">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
             </div>
           ` : ''}
 
-          <!-- Papers List -->
+          <!-- Section 2: Folders (Drag Targets) -->
           <div class="space-y-0.5">
-            <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex justify-between">
-              <span>Papers (${files.length})</span>
+            <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex items-center justify-between">
+              <span>Folders</span>
+              <span class="text-[8px] text-zinc-600">Drag papers here</span>
             </div>
 
-            ${files.length === 0 ? `
+            ${subfolders.length === 0 && !this.activeTag ? `
+              <p class="text-[10px] text-zinc-600 px-2 italic">No subfolders</p>
+            ` : `
+              <div class="space-y-0.5">
+                ${subfolders.map(f => `
+                  <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
+                    <div class="flex items-center space-x-2 min-w-0 flex-1">
+                      <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                      <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
+                    </div>
+                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                      <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                      </button>
+                      <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <!-- Section 3: Papers in Current Folder (Draggable) -->
+          <div class="space-y-0.5">
+            <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex items-center justify-between">
+              <span>In ${folderLabel} (${folderFiles.length})</span>
+            </div>
+
+            ${folderFiles.length === 0 ? `
               <div class="p-5 text-center border border-dashed border-white/[0.08] rounded-xl bg-zinc-950/20 text-zinc-500">
                 <p class="text-[11px] text-zinc-400">No papers here</p>
-                <p class="text-[10px] text-zinc-600 mt-0.5">Drop PDF files to upload</p>
+                <p class="text-[10px] text-zinc-600 mt-0.5">Drop PDF to upload or drag papers into folders</p>
               </div>
             ` : `
               <div class="space-y-1">
-                ${files.map(file => {
+                ${folderFiles.map(file => {
                   const isSelected = file.id === this.selectedFileId;
                   const isFileHidden = Boolean(file.isHidden);
 
                   return `
-                    <div class="group px-2.5 py-2 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'} ${isFileHidden ? 'opacity-50' : ''}" data-file-id="${file.id}">
+                    <div class="group px-2.5 py-2 rounded-xl transition cursor-grab file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'} ${isFileHidden ? 'opacity-50' : ''}" draggable="true" data-file-id="${file.id}">
                       <div class="flex items-start justify-between space-x-2">
                         <div class="flex items-start space-x-2 min-w-0 flex-1">
                           <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
@@ -212,21 +299,23 @@ export class FileExplorer {
 
                         <!-- Actions -->
                         <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                          <!-- Close Active Paper button -->
+                          ${isSelected ? `
+                            <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-close-file" data-file-id="${file.id}" title="Close Document (ปิดหน้านี้)">
+                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                          ` : ''}
+
                           <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                           </button>
-                          <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-blue-400 btn-move-file" data-file-id="${file.id}" title="Move to Folder">
-                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
-                          </button>
 
                           ${isFileHidden ? `
-                            <!-- Restore / Unhide button -->
-                            <button class="p-1 hover:bg-emerald-950/40 rounded text-emerald-400 hover:text-emerald-300 btn-unhide-file" data-file-id="${file.id}" title="Show back in sidebar (นำกลับมาแสดงในแถบข้าง)">
+                            <button class="p-1 hover:bg-emerald-950/40 rounded text-emerald-400 hover:text-emerald-300 btn-unhide-file" data-file-id="${file.id}" title="Show back in sidebar">
                               <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                             </button>
                           ` : `
-                            <!-- Hide from sidebar button (เอาออกจากแถบข้างแต่ยังอยู่ในโฟลเดอร์) -->
-                            <button class="p-1 hover:bg-amber-950/40 rounded text-zinc-400 hover:text-amber-400 btn-hide-file" data-file-id="${file.id}" title="Remove from sidebar (เอาออกจากแถบข้าง - ยังเก็บอยู่ในโฟลเดอร์)">
+                            <button class="p-1 hover:bg-amber-950/40 rounded text-zinc-400 hover:text-amber-400 btn-hide-file" data-file-id="${file.id}" title="Hide from sidebar">
                               <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
                             </button>
                           `}
@@ -247,14 +336,13 @@ export class FileExplorer {
               <div class="pt-2 px-1 flex items-center justify-between text-[10px] text-zinc-500 font-mono border-t border-white/[0.04]">
                 <span>Hidden (${hiddenCount})</span>
                 <button id="btn-toggle-hidden" class="text-blue-400 hover:text-blue-300 underline font-sans transition">
-                  ${this.showHidden ? 'Hide hidden' : 'Show hidden'}
+                  ${this.showHidden ? 'Hide' : 'Show'}
                 </button>
               </div>
             ` : ''}
           </div>
         </div>
 
-        <!-- Hidden input for file upload -->
         <input type="file" id="file-input" accept="application/pdf" class="hidden" multiple />
       </div>
     `;
@@ -263,11 +351,29 @@ export class FileExplorer {
   }
 
   _bindEvents() {
-    // Breadcrumbs
+    // Breadcrumbs click & drop target
     this.container.querySelectorAll('.btn-breadcrumb').forEach(btn => {
+      const fId = btn.getAttribute('data-folder-id');
+      const targetFolderId = fId === 'root' ? null : fId;
+
       btn.addEventListener('click', () => {
-        const fId = btn.getAttribute('data-folder-id');
-        this.setCurrentFolder(fId === 'root' ? null : fId);
+        this.setCurrentFolder(targetFolderId);
+      });
+
+      btn.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        btn.classList.add('drag-over');
+      });
+      btn.addEventListener('dragleave', () => {
+        btn.classList.remove('drag-over');
+      });
+      btn.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        btn.classList.remove('drag-over');
+        const fileId = e.dataTransfer.getData('text/plain');
+        if (fileId) {
+          await this._moveFileToFolder(fileId, targetFolderId);
+        }
       });
     });
 
@@ -279,26 +385,76 @@ export class FileExplorer {
       });
     });
 
-    // Subfolders click
+    // Subfolders click & Drag-over / Drop target
     this.container.querySelectorAll('.folder-item').forEach(el => {
+      const fId = el.getAttribute('data-folder-id');
+
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        const fId = el.getAttribute('data-folder-id');
         this.setCurrentFolder(fId);
+      });
+
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.classList.add('drag-over');
+      });
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('drag-over');
+      });
+      el.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        const fileId = e.dataTransfer.getData('text/plain');
+        if (fileId) {
+          await this._moveFileToFolder(fileId, fId);
+        }
       });
     });
 
-    // File selection
+    // Draggable File Items (Drag & Drop moving)
     this.container.querySelectorAll('.file-item').forEach(el => {
+      const fileId = el.getAttribute('data-file-id');
+
+      el.addEventListener('dragstart', (e) => {
+        this.draggedFileId = fileId;
+        e.dataTransfer.setData('text/plain', fileId);
+        el.classList.add('dragging');
+      });
+
+      el.addEventListener('dragend', () => {
+        this.draggedFileId = null;
+        el.classList.remove('dragging');
+      });
+
       el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        const fileId = el.getAttribute('data-file-id');
         this.selectedFileId = fileId;
         const file = this.files.find(f => f.id === fileId);
         if (file) {
+          this.addToRecent(file.id);
           this.onFileSelect(file);
           this.render();
         }
+      });
+    });
+
+    // Close / Remove from Recent
+    this.container.querySelectorAll('.btn-close-recent').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fileId = btn.getAttribute('data-file-id');
+        this.removeFromRecent(fileId);
+        this.onShowToast('Removed from recent');
+      });
+    });
+
+    // Close Active Paper
+    this.container.querySelectorAll('.btn-close-file').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.selectedFileId = null;
+        this.onFileClose();
+        this.render();
       });
     });
 
@@ -371,15 +527,6 @@ export class FileExplorer {
       });
     });
 
-    // Move File
-    this.container.querySelectorAll('.btn-move-file').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const fileId = btn.getAttribute('data-file-id');
-        this.promptMoveFile(fileId);
-      });
-    });
-
     // Delete File
     this.container.querySelectorAll('.btn-delete-file').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -398,7 +545,7 @@ export class FileExplorer {
       fileInput.addEventListener('change', (e) => this._handleFileInput(e));
     }
 
-    // Drag & drop handlers
+    // Drag & drop file uploads from OS
     const dropZone = this.container.querySelector('#drop-zone');
     if (dropZone) {
       dropZone.addEventListener('dragover', (e) => {
@@ -417,6 +564,21 @@ export class FileExplorer {
         }
       });
     }
+  }
+
+  async _moveFileToFolder(fileId, targetFolderId) {
+    const file = this.files.find(f => f.id === fileId);
+    if (!file) return;
+
+    if (file.folderId === targetFolderId) return;
+
+    file.folderId = targetFolderId;
+    await db.saveFile(file);
+
+    const targetFolder = this.folders.find(f => f.id === targetFolderId);
+    const destName = targetFolder ? `📁 ${targetFolder.name}` : '📁 Root';
+    this.onShowToast(`Moved "${file.name}" to ${destName}`);
+    await this.refresh();
   }
 
   async _handleFileInput(e) {
@@ -521,28 +683,6 @@ export class FileExplorer {
     }
   }
 
-  async promptMoveFile(fileId) {
-    const file = this.files.find(f => f.id === fileId);
-    if (!file) return;
-
-    const options = [
-      { id: null, name: '📁 [Root]' },
-      ...this.folders.map(f => ({ id: f.id, name: `📁 ${f.name}` }))
-    ];
-
-    const folderNames = options.map((opt, idx) => `${idx + 1}. ${opt.name}`).join('\n');
-    const choice = prompt(`Move "${file.name}" to:\n\n${folderNames}\n\nNumber:`);
-    
-    if (choice) {
-      const index = parseInt(choice, 10) - 1;
-      if (index >= 0 && index < options.length) {
-        file.folderId = options[index].id;
-        await db.saveFile(file);
-        await this.refresh();
-      }
-    }
-  }
-
   async promptDeleteFile(fileId) {
     const file = this.files.find(f => f.id === fileId);
     if (!file) return;
@@ -550,7 +690,9 @@ export class FileExplorer {
       await db.deleteFileComplete(fileId);
       if (this.selectedFileId === fileId) {
         this.selectedFileId = null;
+        this.onFileClose();
       }
+      this.removeFromRecent(fileId);
       await this.refresh();
     }
   }

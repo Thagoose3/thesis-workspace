@@ -51,6 +51,7 @@ class ThesisMindApp {
     const container = document.getElementById('explorer-container');
     this.explorer = new FileExplorer(container, {
       onFileSelect: (file) => this.openFile(file),
+      onFileClose: () => this.closeCurrentFile(),
       onFolderChange: (folderId) => console.log('Folder changed:', folderId),
       onOpenMatrix: (folderId) => this.matrixModal.open(folderId),
       onExportFolder: async (folderId) => {
