@@ -1,9 +1,9 @@
 /**
  * Ultra-Minimalist File Explorer & Document Tree for ThesisMind
  * Features:
- * - Native Drag & Drop Moving (ลากไฟล์เปเปอร์ไปวางใส่โฟลเดอร์ได้ทันที)
- * - Recent / Active Reading List with 1-click Close (แถบ Recent สำหรับเปเปอร์ที่กำลังเปิดอ่าน/เปิดล่าสุด)
- * - Close button on paper items to close/unload reader
+ * - Back Button & ".." Parent Navigation (ปุ่มย้อนกลับจากการเข้าโฟลเดอร์)
+ * - Native Drag & Drop Moving (ลากไฟล์เปเปอร์ไปวางใส่โฟลเดอร์/ปุ่มย้อนกลับได้ทันที)
+ * - Recent / Active Reading List with 1-click Close
  * - Subfolders, Breadcrumbs, Tags, Rename, Delete, Hide/Archive.
  */
 
@@ -84,6 +84,13 @@ export class FileExplorer {
     this.render();
   }
 
+  goBackToParent() {
+    if (!this.currentFolderId) return;
+    const curFolder = this.folders.find(f => f.id === this.currentFolderId);
+    const parentId = curFolder ? curFolder.parentId : null;
+    this.setCurrentFolder(parentId);
+  }
+
   setTagFilter(tag) {
     this.activeTag = this.activeTag === tag ? null : tag;
     this.render();
@@ -156,6 +163,8 @@ export class FileExplorer {
 
     const curFolder = this.folders.find(f => f.id === this.currentFolderId);
     const folderLabel = curFolder ? curFolder.name : 'Root';
+    const isInsideFolder = this.currentFolderId !== null;
+    const parentFolderId = curFolder ? curFolder.parentId : null;
 
     this.container.innerHTML = `
       <div class="h-full flex flex-col bg-zinc-900 text-zinc-300 border-r border-white/[0.06] select-none">
@@ -174,17 +183,26 @@ export class FileExplorer {
           </div>
         </div>
 
-        <!-- Breadcrumb / Path (Drop target for Root & Parent folders) -->
-        <div class="px-3 py-1.5 border-b border-white/[0.04] bg-zinc-950/40 flex items-center space-x-1 text-[11px] overflow-x-auto whitespace-nowrap">
-          <button class="btn-breadcrumb text-zinc-500 hover:text-zinc-300 transition font-medium px-1 rounded hover:bg-white/[0.04]" data-folder-id="root">
-            Root
-          </button>
-          ${breadcrumbPath.map(f => `
-            <span class="text-zinc-700">/</span>
-            <button class="btn-breadcrumb font-medium transition truncate max-w-[100px] px-1 rounded ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'}" data-folder-id="${f.id}">
-              ${f.name}
+        <!-- Breadcrumb & Back Navigation Bar -->
+        <div class="px-2.5 py-1.5 border-b border-white/[0.04] bg-zinc-950/50 flex items-center space-x-1.5 text-[11px] overflow-x-auto whitespace-nowrap">
+          ${isInsideFolder ? `
+            <button id="btn-folder-back" class="px-1.5 py-0.5 rounded-md bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 transition flex items-center space-x-1 font-medium flex-shrink-0" title="Back to previous folder (ย้อนกลับ)">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+              <span>Back</span>
             </button>
-          `).join('')}
+          ` : ''}
+
+          <div class="flex items-center space-x-1 overflow-x-auto">
+            <button class="btn-breadcrumb text-zinc-500 hover:text-zinc-300 transition font-medium px-1 rounded hover:bg-white/[0.04]" data-folder-id="root">
+              Root
+            </button>
+            ${breadcrumbPath.map(f => `
+              <span class="text-zinc-700">/</span>
+              <button class="btn-breadcrumb font-medium transition truncate max-w-[90px] px-1 rounded ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'}" data-folder-id="${f.id}">
+                ${f.name}
+              </button>
+            `).join('')}
+          </div>
         </div>
 
         <!-- Tag Pills -->
@@ -231,35 +249,43 @@ export class FileExplorer {
             </div>
           ` : ''}
 
-          <!-- Section 2: Folders (Drag Targets) -->
+          <!-- Section 2: Folders (Drag Targets & Parent ".." row) -->
           <div class="space-y-0.5">
             <div class="text-[9px] font-mono text-zinc-500 uppercase px-1.5 mb-1 flex items-center justify-between">
               <span>Folders</span>
               <span class="text-[8px] text-zinc-600">Drag papers here</span>
             </div>
 
-            ${subfolders.length === 0 && !this.activeTag ? `
-              <p class="text-[10px] text-zinc-600 px-2 italic">No subfolders</p>
-            ` : `
-              <div class="space-y-0.5">
-                ${subfolders.map(f => `
-                  <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
-                    <div class="flex items-center space-x-2 min-w-0 flex-1">
-                      <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-                      <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
-                    </div>
-                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                      <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                      </button>
-                      <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                      </button>
-                    </div>
+            <div class="space-y-0.5">
+              <!-- Up/Parent folder item if inside subfolder -->
+              ${isInsideFolder ? `
+                <div class="group flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 transition cursor-pointer folder-item-parent" data-folder-id="${parentFolderId || 'root'}">
+                  <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+                  <span class="text-xs font-medium truncate">.. (Up to ${parentFolderId ? 'Parent' : 'Root'})</span>
+                </div>
+              ` : ''}
+
+              ${subfolders.length === 0 && !this.activeTag && !isInsideFolder ? `
+                <p class="text-[10px] text-zinc-600 px-2 italic">No subfolders</p>
+              ` : ''}
+
+              ${subfolders.map(f => `
+                <div class="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/[0.05] transition cursor-pointer folder-item" data-folder-id="${f.id}">
+                  <div class="flex items-center space-x-2 min-w-0 flex-1">
+                    <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400/90 flex-shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                    <span class="text-xs text-zinc-300 group-hover:text-zinc-100 truncate transition">${f.name}</span>
                   </div>
-                `).join('')}
-              </div>
-            `}
+                  <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                    <button class="p-0.5 hover:bg-white/[0.08] rounded text-zinc-500 hover:text-zinc-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                    <button class="p-0.5 hover:bg-rose-900/40 rounded text-zinc-500 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
           </div>
 
           <!-- Section 3: Papers in Current Folder (Draggable) -->
@@ -270,7 +296,7 @@ export class FileExplorer {
 
             ${folderFiles.length === 0 ? `
               <div class="p-5 text-center border border-dashed border-white/[0.08] rounded-xl bg-zinc-950/20 text-zinc-500">
-                <p class="text-[11px] text-zinc-400">No papers here</p>
+                <p class="text-[11px] text-zinc-400">No papers in this folder</p>
                 <p class="text-[10px] text-zinc-600 mt-0.5">Drop PDF to upload or drag papers into folders</p>
               </div>
             ` : `
@@ -299,7 +325,6 @@ export class FileExplorer {
 
                         <!-- Actions -->
                         <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                          <!-- Close Active Paper button -->
                           ${isSelected ? `
                             <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-close-file" data-file-id="${file.id}" title="Close Document (ปิดหน้านี้)">
                               <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -351,6 +376,38 @@ export class FileExplorer {
   }
 
   _bindEvents() {
+    // Back Button in breadcrumbs
+    this.container.querySelector('#btn-folder-back')?.addEventListener('click', () => {
+      this.goBackToParent();
+    });
+
+    // Parent ".." item click & drop target
+    const parentFolderEl = this.container.querySelector('.folder-item-parent');
+    if (parentFolderEl) {
+      const parentIdAttr = parentFolderEl.getAttribute('data-folder-id');
+      const targetParentId = parentIdAttr === 'root' ? null : parentIdAttr;
+
+      parentFolderEl.addEventListener('click', () => {
+        this.setCurrentFolder(targetParentId);
+      });
+
+      parentFolderEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        parentFolderEl.classList.add('drag-over');
+      });
+      parentFolderEl.addEventListener('dragleave', () => {
+        parentFolderEl.classList.remove('drag-over');
+      });
+      parentFolderEl.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        parentFolderEl.classList.remove('drag-over');
+        const fileId = e.dataTransfer.getData('text/plain');
+        if (fileId) {
+          await this._moveFileToFolder(fileId, targetParentId);
+        }
+      });
+    }
+
     // Breadcrumbs click & drop target
     this.container.querySelectorAll('.btn-breadcrumb').forEach(btn => {
       const fId = btn.getAttribute('data-folder-id');

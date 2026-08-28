@@ -1,15 +1,15 @@
 /**
  * PDF Viewer & Comprehensive Interactive Annotation / Markup Engine for ThesisMind
- * Features: High-performance canvas rendering, detached ArrayBuffer protection,
- * Smooth Fit Width/Zoom, Multi-color Highlights, Sticky Text Boxes,
- * Image Insertions, Freehand Pen, Box shapes, and Responsive Pixel-distance Eraser.
+ * Features:
+ * - Page Rotation (หมุนแนวตั้ง/แนวนอน แยกตามหน้าหรือหน้าปัจจุบัน 90°, 180°, 270°)
+ * - High-performance canvas rendering & detached ArrayBuffer protection
+ * - Multi-color Highlights, Sticky Text Boxes, Image Insertions, Freehand Pen, Box shapes, Eraser & Undo
  */
 
 import { HighlightColors, MarkupColors, PaperThemes, createHighlight, createSideNote, createMarkupItem } from './models.js';
 import { db } from './db.js';
 import { tts } from './tts.js';
 
-// Distance from point (px, py) to line segment (x1, y1)-(x2, y2)
 function distToSegment(px, py, x1, y1, x2, y2) {
   const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
   if (l2 === 0) return Math.hypot(px - x1, py - y1);
@@ -30,6 +30,7 @@ export class PDFViewerEngine {
     this.totalPages = 0;
     this.highlights = [];
     this.markups = [];
+    this.pageRotations = {}; // { [pageNum]: degrees (0, 90, 180, 270) }
     
     // Active tool: 'select' | 'textbox' | 'image' | 'pen' | 'rect' | 'eraser'
     this.activeTool = 'select';
@@ -162,6 +163,7 @@ export class PDFViewerEngine {
       if (e.key === 't' || e.key === 'T') this.setTool('textbox');
       if (e.key === 'p' || e.key === 'P') this.setTool('pen');
       if (e.key === 'e' || e.key === 'E') this.setTool('eraser');
+      if (e.key === 'r' || e.key === 'R') this.rotateCurrentPage();
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
         this.undoLastDrawing();
@@ -236,6 +238,129 @@ export class PDFViewerEngine {
     pageMarkups.forEach(m => {
       this._renderDrawing(canvas, m);
     });
+  }
+
+  // Rotate a specific page 90 degrees
+  async rotatePage(pageNum, degrees = 90) {
+    if (!this.currentFile || !this.pdfDoc) return;
+    
+    this.pageRotations[pageNum] = ((this.pageRotations[pageNum] || 0) + degrees) % 360;
+    await db.saveSetting(`rotations_${this.currentFile.id}`, this.pageRotations);
+    
+    await this._rerenderSinglePage(pageNum);
+  }
+
+  // Rotate currently viewed page
+  async rotateCurrentPage(degrees = 90) {
+    if (this.currentPage) {
+      await this.rotatePage(this.currentPage, degrees);
+    }
+  }
+
+  async _rerenderSinglePage(pageNum) {
+    const oldContainer = document.getElementById(`page-${pageNum}`);
+    if (!oldContainer || !this.pdfDoc) return;
+
+    const page = await this.pdfDoc.getPage(pageNum);
+    const pageRotation = (page.rotate + (this.pageRotations[pageNum] || 0)) % 360;
+    const viewport = page.getViewport({ scale: this.scale, rotation: pageRotation });
+    const outputScale = window.devicePixelRatio || 1;
+
+    const widthPx = Math.floor(viewport.width);
+    const heightPx = Math.floor(viewport.height);
+
+    const newContainer = document.createElement('div');
+    newContainer.className = `pdf-page-container group relative mx-auto my-6 rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-150 pdf-theme-${this.theme}`;
+    newContainer.id = `page-${pageNum}`;
+    newContainer.setAttribute('data-page-number', pageNum);
+    newContainer.style.width = `${widthPx}px`;
+    newContainer.style.height = `${heightPx}px`;
+    newContainer.style.minWidth = `${widthPx}px`;
+    newContainer.style.minHeight = `${heightPx}px`;
+
+    // Canvas layer
+    const canvas = document.createElement('canvas');
+    canvas.className = 'block absolute top-0 left-0 z-[1]';
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = `${widthPx}px`;
+    canvas.style.height = `${heightPx}px`;
+    const ctx = canvas.getContext('2d');
+    newContainer.appendChild(canvas);
+
+    // Text layer
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    textLayerDiv.style.width = `${widthPx}px`;
+    textLayerDiv.style.height = `${heightPx}px`;
+    newContainer.appendChild(textLayerDiv);
+
+    // Highlight overlay layer
+    const highlightLayer = document.createElement('div');
+    highlightLayer.className = 'highlight-layer absolute top-0 left-0 w-full h-full pointer-events-none z-[3]';
+    newContainer.appendChild(highlightLayer);
+
+    // Interactive Markup Layer
+    const markupLayer = document.createElement('div');
+    markupLayer.className = 'markup-layer';
+    newContainer.appendChild(markupLayer);
+
+    // Drawing Canvas Layer
+    const drawingCanvas = document.createElement('canvas');
+    drawingCanvas.className = `drawing-canvas ${this.activeTool === 'pen' || this.activeTool === 'rect' || this.activeTool === 'eraser' ? 'active' : ''}`;
+    drawingCanvas.width = widthPx;
+    drawingCanvas.height = heightPx;
+    newContainer.appendChild(drawingCanvas);
+
+    // Floating Rotate Page Button (Top Right corner)
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'btn-rotate-page absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 text-zinc-400 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition shadow-lg z-20 border border-white/[0.08]';
+    rotateBtn.setAttribute('data-page', pageNum);
+    rotateBtn.title = 'Rotate this page 90° (หมุนแนวตั้ง/แนวนอน)';
+    rotateBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`;
+    rotateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.rotatePage(pageNum);
+    });
+    newContainer.appendChild(rotateBtn);
+
+    oldContainer.replaceWith(newContainer);
+
+    // Render Canvas
+    const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+    await page.render({
+      canvasContext: ctx,
+      transform: transform,
+      viewport: viewport
+    }).promise;
+
+    // Render Text Layer
+    const textContent = await page.getTextContent();
+    const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+    if (pdfjsLib.renderTextLayer) {
+      await pdfjsLib.renderTextLayer({
+        textContentSource: textContent,
+        container: textLayerDiv,
+        viewport: viewport,
+        textDivs: []
+      }).promise;
+    }
+
+    // Render Highlights
+    const pageHighlights = this.highlights.filter(h => h.pageNumber === pageNum);
+    pageHighlights.forEach(hl => {
+      this._renderHighlightOnPage(newContainer, hl);
+    });
+
+    // Render Markups
+    const pageMarkups = this.markups.filter(m => m.pageNumber === pageNum);
+    pageMarkups.forEach(m => {
+      if (m.type === 'textbox') this._renderTextBox(newContainer, m);
+      if (m.type === 'image') this._renderImageBox(newContainer, m);
+      if (m.type === 'drawing') this._renderDrawing(drawingCanvas, m);
+    });
+
+    this._bindPageMarkupEvents(newContainer, drawingCanvas, pageNum);
   }
 
   _initSelectionToolbar() {
@@ -526,6 +651,7 @@ export class PDFViewerEngine {
     try {
       this.highlights = await db.getHighlights(paperFile.id);
       this.markups = await db.getMarkups(paperFile.id);
+      this.pageRotations = await db.getSetting(`rotations_${paperFile.id}`, {}) || {};
       
       const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
       if (!pdfjsLib) throw new Error('PDF.js library is not loaded');
@@ -536,7 +662,6 @@ export class PDFViewerEngine {
 
       let loadingTask;
       if (paperFile.pdfData instanceof ArrayBuffer) {
-        // ALWAYS slice(0) to prevent ArrayBuffer detachment issues!
         loadingTask = pdfjsLib.getDocument({ data: paperFile.pdfData.slice(0) });
       } else if (typeof paperFile.pdfData === 'string') {
         loadingTask = pdfjsLib.getDocument(paperFile.pdfData);
@@ -567,14 +692,15 @@ export class PDFViewerEngine {
 
   async _renderPage(pageNum) {
     const page = await this.pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: this.scale });
+    const pageRotation = (page.rotate + (this.pageRotations[pageNum] || 0)) % 360;
+    const viewport = page.getViewport({ scale: this.scale, rotation: pageRotation });
     const outputScale = window.devicePixelRatio || 1;
 
     const widthPx = Math.floor(viewport.width);
     const heightPx = Math.floor(viewport.height);
 
     const pageContainer = document.createElement('div');
-    pageContainer.className = `pdf-page-container relative mx-auto my-6 rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-150 pdf-theme-${this.theme}`;
+    pageContainer.className = `pdf-page-container group relative mx-auto my-6 rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-150 pdf-theme-${this.theme}`;
     pageContainer.id = `page-${pageNum}`;
     pageContainer.setAttribute('data-page-number', pageNum);
     pageContainer.style.width = `${widthPx}px`;
@@ -615,6 +741,18 @@ export class PDFViewerEngine {
     drawingCanvas.width = widthPx;
     drawingCanvas.height = heightPx;
     pageContainer.appendChild(drawingCanvas);
+
+    // Floating Rotate Page Button (Top Right corner)
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'btn-rotate-page absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 text-zinc-400 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition shadow-lg z-20 border border-white/[0.08]';
+    rotateBtn.setAttribute('data-page', pageNum);
+    rotateBtn.title = 'Rotate this page 90° (หมุนแนวตั้ง/แนวนอน)';
+    rotateBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`;
+    rotateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.rotatePage(pageNum);
+    });
+    pageContainer.appendChild(rotateBtn);
 
     this.container.appendChild(pageContainer);
 
@@ -683,7 +821,7 @@ export class PDFViewerEngine {
   _bindPageMarkupEvents(pageContainer, drawingCanvas, pageNum) {
     pageContainer.addEventListener('click', async (e) => {
       if (this.activeTool === 'textbox') {
-        if (e.target.closest('.markup-textbox') || e.target.closest('.markup-image-box')) return;
+        if (e.target.closest('.markup-textbox') || e.target.closest('.markup-image-box') || e.target.closest('.btn-rotate-page')) return;
         const rect = pageContainer.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
@@ -733,7 +871,6 @@ export class PDFViewerEngine {
           const ry = m.y * height;
           const rw = m.width * width;
           const rh = m.height * height;
-          // Check perimeter of rectangle
           const dTop = distToSegment(clickX, clickY, rx, ry, rx + rw, ry);
           const dBottom = distToSegment(clickX, clickY, rx, ry + rh, rx + rw, ry + rh);
           const dLeft = distToSegment(clickX, clickY, rx, ry, rx, ry + rh);
@@ -742,7 +879,6 @@ export class PDFViewerEngine {
             hit = true;
           }
         } else if (m.data.paths && m.data.paths.length > 0) {
-          // Check distance to any path segment
           for (let i = 0; i < m.data.paths.length - 1; i++) {
             const p1 = m.data.paths[i];
             const p2 = m.data.paths[i + 1];
@@ -1078,7 +1214,6 @@ export class PDFViewerEngine {
     if (newScale < 0.5 || newScale > 3.0) return;
     this.scale = newScale;
     
-    // Smooth in-memory re-rendering without reloading pdfDoc!
     if (this.pdfDoc && this.currentFile) {
       const savedScrollPage = this.currentPage;
       this.container.innerHTML = '';

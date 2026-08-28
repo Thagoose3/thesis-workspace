@@ -256,6 +256,10 @@ class ThesisMindApp {
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => this.viewer.zoomIn());
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => this.viewer.zoomOut());
     document.getElementById('btn-zoom-fit')?.addEventListener('click', () => this.viewer.fitWidth());
+    document.getElementById('btn-rotate-page')?.addEventListener('click', async () => {
+      await this.viewer.rotateCurrentPage();
+      this.showToast('Rotated page 90°');
+    });
 
     document.getElementById('btn-page-prev')?.addEventListener('click', () => {
       if (this.viewer.currentPage > 1) {
