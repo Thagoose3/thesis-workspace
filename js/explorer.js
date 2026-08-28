@@ -90,7 +90,7 @@ export class FileExplorer {
     this._saveRecentToStorage();
     if (this.selectedFileId === fileId) {
       this.selectedFileId = null;
-      this.onFileClose();
+      this.onFileClose(fileId);
     }
     this.render();
   }

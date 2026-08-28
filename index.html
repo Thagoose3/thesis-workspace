@@ -197,13 +197,12 @@
       
       <!-- Minimalist Floating Top Toolbar for PDF -->
       <div id="pdf-toolbar" class="h-10 bg-zinc-900/70 border-b border-white/[0.04] px-4 flex items-center justify-between flex-shrink-0 text-xs text-zinc-300 backdrop-blur-md">
-        <!-- Document Title -->
-        <div class="flex items-center space-x-2 truncate max-w-sm">
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-          <span id="current-file-title" class="text-xs font-medium text-zinc-200 truncate">No Document Selected</span>
-          <button id="btn-close-current-file" class="hidden p-0.5 rounded-md hover:bg-white/[0.08] text-zinc-500 hover:text-zinc-200 transition" title="Close Document (ปิดหน้าอ่านเปเปอร์นี้)">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
+        <!-- Multi-Document Tabs Bar -->
+        <div id="pdf-tabs-bar" class="flex-1 flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-0.5 mr-3 max-w-[calc(100%-250px)]">
+          <div id="pdf-tabs-empty" class="flex items-center space-x-2 text-zinc-500 text-xs">
+            <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+            <span class="text-xs font-medium text-zinc-400">No Document Selected</span>
+          </div>
         </div>
 
         <!-- Controls: Page & Zoom Pills -->

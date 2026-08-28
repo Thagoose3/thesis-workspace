@@ -23,6 +23,8 @@ class ThesisMindApp {
     this.matrixModal = null;
     this.searchModal = null;
     this.currentFile = null;
+    this.openTabs = [];
+    this.activeFileId = null;
     this.currentTheme = 'light';
     this.leftPanelVisible = true;
     this.rightPanelVisible = true;
@@ -54,7 +56,7 @@ class ThesisMindApp {
     const container = document.getElementById('explorer-container');
     this.explorer = new FileExplorer(container, {
       onFileSelect: (file) => this.openFile(file),
-      onFileClose: () => this.closeCurrentFile(),
+      onFileClose: (fileId) => fileId ? this.closeTab(fileId) : this.closeCurrentFile(),
       onFolderChange: (folderId) => console.log('Folder changed:', folderId),
       onOpenMatrix: (folderId) => this.matrixModal.open(folderId),
       onExportFolder: async (folderId) => {
@@ -148,34 +150,64 @@ class ThesisMindApp {
   }
 
   async openFile(file) {
+    if (!file) return;
+
+    // Add to open tabs if not already present
+    const existingIndex = this.openTabs.findIndex(f => f.id === file.id);
+    if (existingIndex === -1) {
+      this.openTabs.push(file);
+    } else {
+      this.openTabs[existingIndex] = file;
+    }
+
+    this.activeFileId = file.id;
     this.currentFile = file;
+
+    this._renderTabs();
+
     if (this.explorer) {
       this.explorer.selectedFileId = file.id;
       this.explorer.render();
     }
 
-    const titleEl = document.getElementById('current-file-title');
-    if (titleEl) titleEl.textContent = file.name;
-
-    const closeBtn = document.getElementById('btn-close-current-file');
-    if (closeBtn) closeBtn.classList.remove('hidden');
-
     await this.viewer.loadPDF(file);
     await this.studio.loadFile(file);
   }
 
+  async closeTab(fileId, event = null) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
+    const index = this.openTabs.findIndex(f => f.id === fileId);
+    if (index === -1) return;
+
+    this.openTabs.splice(index, 1);
+
+    if (this.activeFileId === fileId) {
+      if (this.openTabs.length > 0) {
+        const nextIndex = Math.min(index, this.openTabs.length - 1);
+        await this.openFile(this.openTabs[nextIndex]);
+      } else {
+        this.closeCurrentFile();
+      }
+    } else {
+      this._renderTabs();
+    }
+  }
+
   closeCurrentFile() {
+    this.openTabs = [];
+    this.activeFileId = null;
     this.currentFile = null;
+
+    this._renderTabs();
+
     if (this.explorer) {
       this.explorer.selectedFileId = null;
       this.explorer.render();
     }
-
-    const titleEl = document.getElementById('current-file-title');
-    if (titleEl) titleEl.textContent = 'No Document Selected';
-
-    const closeBtn = document.getElementById('btn-close-current-file');
-    if (closeBtn) closeBtn.classList.add('hidden');
 
     const ind = document.getElementById('page-indicator');
     const inp = document.getElementById('page-input');
@@ -194,6 +226,54 @@ class ThesisMindApp {
     if (this.studio) {
       this.studio.renderEmpty();
     }
+  }
+
+  _renderTabs() {
+    const bar = document.getElementById('pdf-tabs-bar');
+    if (!bar) return;
+
+    if (this.openTabs.length === 0) {
+      bar.innerHTML = `
+        <div id="pdf-tabs-empty" class="flex items-center space-x-2 text-zinc-500 text-xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+          <span class="text-xs font-medium text-zinc-400">No Document Selected</span>
+        </div>
+      `;
+      return;
+    }
+
+    bar.innerHTML = this.openTabs.map(file => {
+      const isActive = file.id === this.activeFileId;
+      return `
+        <div class="pdf-tab group flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-xs font-medium cursor-pointer transition-all flex-shrink-0 border ${isActive ? 'bg-zinc-800/95 text-zinc-100 border-white/[0.14] shadow-sm' : 'bg-zinc-950/50 text-zinc-400 border-white/[0.04] hover:text-zinc-200 hover:bg-white/[0.04]'}" data-file-id="${file.id}">
+          <span class="w-1.5 h-1.5 rounded-full ${isActive ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'bg-zinc-600'}"></span>
+          <span class="truncate max-w-[130px] text-[11px] select-none" title="${file.name}">${file.name}</span>
+          <button class="btn-close-tab p-0.5 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.1] transition opacity-60 group-hover:opacity-100" data-file-id="${file.id}" title="Close tab (ปิดแท็บ)">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    // Click tab to switch
+    bar.querySelectorAll('.pdf-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-close-tab')) return;
+        const fileId = tab.getAttribute('data-file-id');
+        const targetFile = this.openTabs.find(f => f.id === fileId);
+        if (targetFile && targetFile.id !== this.activeFileId) {
+          this.openFile(targetFile);
+        }
+      });
+    });
+
+    // Close tab button
+    bar.querySelectorAll('.btn-close-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const fileId = btn.getAttribute('data-file-id');
+        this.closeTab(fileId, e);
+      });
+    });
   }
 
   _initAuthAndSync() {

@@ -35,6 +35,22 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* Hide scrollbar for tab bar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.pdf-tab {
+  user-select: none;
+}
+.pdf-tab:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 /* Drag and Drop Visual Feedback */
 .file-item[draggable="true"] {
   cursor: grab;
