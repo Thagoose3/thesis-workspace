@@ -1,10 +1,10 @@
 /**
- * Cross-Device Cloud Sync Engine using Firebase Cloud Firestore
+ * Cross-Device Cloud Sync Engine using Firebase Cloud Firestore for PaperVault
  * Features:
- * - Bi-directional syncing between local IndexedDB and Cloud Firestore
- * - ArrayBuffer to Base64 serialization for PDF documents
- * - Auto sync upon Google login and manual "Sync Now" trigger
- * - Live sync status indicator for the UI
+ * - Resilient Bi-directional sync between local IndexedDB and Cloud Firestore
+ * - Safe document size thresholding (Firestore 1MB limit protection)
+ * - Granular per-item error isolation so large files never break notes/highlights sync
+ * - Clear diagnostics and helpful error feedback for Firestore security rules
  */
 
 import { firebaseService } from './firebase.js';
@@ -14,35 +14,47 @@ import {
   setDoc, 
   getDocs, 
   deleteDoc, 
-  collection, 
-  writeBatch 
+  collection 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+const MAX_FIRESTORE_BLOB_SIZE = 700 * 1024; // 700 KB safe limit for 1MB Firestore document
 
 // Helpers for binary PDF conversion
 function arrayBufferToBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  try {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  } catch (e) {
+    console.warn('Failed to convert ArrayBuffer to Base64:', e);
+    return null;
   }
-  return window.btoa(binary);
 }
 
 function base64ToArrayBuffer(base64) {
-  const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  try {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch (e) {
+    console.warn('Failed to convert Base64 to ArrayBuffer:', e);
+    return null;
   }
-  return bytes.buffer;
 }
 
 class CloudSyncManager {
   constructor() {
     this.status = 'idle'; // 'idle' | 'syncing' | 'synced' | 'error'
     this.lastSyncedAt = null;
+    this.lastErrorMessage = null;
     this.listeners = new Set();
     this.syncInProgress = false;
 
@@ -62,7 +74,8 @@ class CloudSyncManager {
     listener({
       status: this.status,
       lastSyncedAt: this.lastSyncedAt,
-      isSyncing: this.syncInProgress
+      isSyncing: this.syncInProgress,
+      errorMessage: this.lastErrorMessage
     });
     return () => this.listeners.delete(listener);
   }
@@ -71,7 +84,8 @@ class CloudSyncManager {
     const state = {
       status: this.status,
       lastSyncedAt: this.lastSyncedAt,
-      isSyncing: this.syncInProgress
+      isSyncing: this.syncInProgress,
+      errorMessage: this.lastErrorMessage
     };
     for (const listener of this.listeners) {
       listener(state);
@@ -91,34 +105,82 @@ class CloudSyncManager {
     if (this.syncInProgress) return;
     this.syncInProgress = true;
     this.status = 'syncing';
+    this.lastErrorMessage = null;
     this.notify();
 
+    let hadErrors = false;
+    const uid = user.uid;
+
     try {
-      const uid = user.uid;
-
       // 1. Sync Folders
-      await this._syncCollection(uid, 'folders', () => db.getFolders(), (item) => db.saveFolder(item));
+      try {
+        await this._syncCollection(uid, 'folders', () => db.getFolders(), (item) => db.saveFolder(item));
+      } catch (err) {
+        console.warn('Folders sync warning:', err);
+        hadErrors = true;
+        this._handleSyncError(err);
+      }
 
-      // 2. Sync Papers (including PDF Data)
-      await this._syncPapers(uid);
+      // 2. Sync Highlights
+      try {
+        await this._syncCollection(uid, 'highlights', () => db.getAllHighlights(), (item) => db.saveHighlight(item));
+      } catch (err) {
+        console.warn('Highlights sync warning:', err);
+        hadErrors = true;
+        this._handleSyncError(err);
+      }
 
-      // 3. Sync Highlights
-      await this._syncCollection(uid, 'highlights', () => db.getAllHighlights(), (item) => db.saveHighlight(item));
+      // 3. Sync Markups
+      try {
+        await this._syncCollection(uid, 'markups', () => db.getAllMarkups(), (item) => db.saveMarkup(item));
+      } catch (err) {
+        console.warn('Markups sync warning:', err);
+        hadErrors = true;
+        this._handleSyncError(err);
+      }
 
-      // 4. Sync Markups
-      await this._syncCollection(uid, 'markups', () => db.getAllMarkups(), (item) => db.saveMarkup(item));
+      // 4. Sync SideNotes
+      try {
+        await this._syncCollection(uid, 'notes', () => db.getAllSideNotes(), (item) => db.saveSideNote(item));
+      } catch (err) {
+        console.warn('Notes sync warning:', err);
+        hadErrors = true;
+        this._handleSyncError(err);
+      }
 
-      // 5. Sync SideNotes
-      await this._syncCollection(uid, 'notes', () => db.getAllSideNotes(), (item) => db.saveSideNote(item));
+      // 5. Sync Papers (Metadata + safe size payloads)
+      try {
+        await this._syncPapers(uid);
+      } catch (err) {
+        console.warn('Papers sync warning:', err);
+        hadErrors = true;
+        this._handleSyncError(err);
+      }
 
-      this.status = 'synced';
-      this.lastSyncedAt = new Date();
+      if (!hadErrors) {
+        this.status = 'synced';
+        this.lastSyncedAt = new Date();
+        this.lastErrorMessage = null;
+      } else {
+        this.status = 'error';
+      }
     } catch (err) {
-      console.error('Cloud Sync Error:', err);
+      console.error('Fatal Cloud Sync Error:', err);
       this.status = 'error';
+      this._handleSyncError(err);
     } finally {
       this.syncInProgress = false;
       this.notify();
+    }
+  }
+
+  _handleSyncError(err) {
+    if (err && (err.code === 'permission-denied' || err.message?.includes('permission'))) {
+      this.lastErrorMessage = 'Firestore permission denied. Please create Firestore Database in Firebase Console and set rules to allow read/write.';
+    } else if (err && err.message?.includes('size')) {
+      this.lastErrorMessage = 'Some documents exceeded Firestore size limit.';
+    } else {
+      this.lastErrorMessage = err?.message || 'Sync error occurred';
     }
   }
 
@@ -158,7 +220,7 @@ class CloudSyncManager {
     }
   }
 
-  // Paper sync with ArrayBuffer binary serialization
+  // Paper sync with 1MB Firestore size protection
   async _syncPapers(uid) {
     const firestore = firebaseService.db;
     const colRef = collection(firestore, `users/${uid}/papers`);
@@ -168,7 +230,8 @@ class CloudSyncManager {
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
       if (data.pdfDataBase64) {
-        data.pdfData = base64ToArrayBuffer(data.pdfDataBase64);
+        const buffer = base64ToArrayBuffer(data.pdfDataBase64);
+        if (buffer) data.pdfData = buffer;
         delete data.pdfDataBase64;
       }
       remoteDocs.set(docSnap.id, data);
@@ -191,11 +254,24 @@ class CloudSyncManager {
       const remotePaper = remoteDocs.get(id);
       if (!remotePaper) {
         const payload = { ...localPaper };
+        const byteLength = payload.pdfData instanceof ArrayBuffer 
+          ? payload.pdfData.byteLength 
+          : (typeof payload.pdfData === 'string' ? payload.pdfData.length : 0);
+
         if (payload.pdfData instanceof ArrayBuffer) {
-          payload.pdfDataBase64 = arrayBufferToBase64(payload.pdfData);
+          if (byteLength <= MAX_FIRESTORE_BLOB_SIZE) {
+            payload.pdfDataBase64 = arrayBufferToBase64(payload.pdfData);
+          } else {
+            payload.isLargeFileStoredLocally = true;
+          }
           delete payload.pdfData;
         }
-        await setDoc(doc(firestore, `users/${uid}/papers`, id), payload);
+
+        try {
+          await setDoc(doc(firestore, `users/${uid}/papers`, id), payload);
+        } catch (itemErr) {
+          console.warn(`Could not sync paper ${id} to cloud:`, itemErr);
+        }
       }
     }
   }
@@ -212,7 +288,12 @@ class CloudSyncManager {
       const payload = { ...item, updatedAt: new Date().toISOString() };
 
       if (type === 'paper' && payload.pdfData instanceof ArrayBuffer) {
-        payload.pdfDataBase64 = arrayBufferToBase64(payload.pdfData);
+        const byteLength = payload.pdfData.byteLength;
+        if (byteLength <= MAX_FIRESTORE_BLOB_SIZE) {
+          payload.pdfDataBase64 = arrayBufferToBase64(payload.pdfData);
+        } else {
+          payload.isLargeFileStoredLocally = true;
+        }
         delete payload.pdfData;
       }
 
