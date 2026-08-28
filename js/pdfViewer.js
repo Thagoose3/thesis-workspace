@@ -42,6 +42,9 @@ export class PDFViewerEngine {
     this.selectionToolbar = null;
     this.highlightPopover = null;
     this.markupDock = null;
+    this.textboxFormatBar = null;
+    this.activeTextboxMarkup = null;
+    this.activeTextboxEl = null;
     this.activeSelection = null;
     this.activeHighlight = null;
     
@@ -55,6 +58,7 @@ export class PDFViewerEngine {
     
     this._initSelectionToolbar();
     this._initHighlightPopover();
+    this._initTextboxFormatBar();
     this._initMarkupDock();
     this._initScrollObserver();
     this._initClipboardPasteListener();
@@ -496,6 +500,211 @@ export class PDFViewerEngine {
   hideHighlightPopover() {
     if (this.highlightPopover) {
       this.highlightPopover.classList.add('hidden');
+    }
+  }
+
+  _initTextboxFormatBar() {
+    this.textboxFormatBar = document.createElement('div');
+    this.textboxFormatBar.className = 'textbox-format-bar fixed z-50 hidden minimal-dropdown rounded-2xl shadow-2xl px-2.5 py-1.5 flex items-center space-x-2 border border-white/[0.12] text-xs select-none backdrop-blur-xl';
+    
+    this.textboxFormatBar.innerHTML = `
+      <!-- Font Size Adjuster -->
+      <div class="flex items-center space-x-0.5 bg-white/[0.06] rounded-lg px-1 py-0.5" title="Font Size (ขนาดตัวอักษร)">
+        <button id="tb-bar-size-down" class="px-1 text-[11px] font-bold text-zinc-400 hover:text-white hover:bg-white/[0.08] rounded transition">A-</button>
+        <span id="tb-bar-size-display" class="text-[10px] font-mono text-zinc-200 px-1 min-w-[28px] text-center font-medium">13px</span>
+        <button id="tb-bar-size-up" class="px-1 text-[11px] font-bold text-zinc-400 hover:text-white hover:bg-white/[0.08] rounded transition">A+</button>
+      </div>
+
+      <div class="w-px h-3.5 bg-white/[0.1]"></div>
+
+      <!-- Bold & Italic -->
+      <div class="flex items-center space-x-0.5">
+        <button id="tb-bar-bold" class="w-6 h-6 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.08] font-bold transition text-xs flex items-center justify-center" title="Bold (ตัวหนา)">B</button>
+        <button id="tb-bar-italic" class="w-6 h-6 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.08] italic font-serif transition text-xs flex items-center justify-center" title="Italic (ตัวเอียง)">I</button>
+      </div>
+
+      <div class="w-px h-3.5 bg-white/[0.1]"></div>
+
+      <!-- Text Color Picker -->
+      <div class="flex items-center space-x-1" title="Text Color (สีตัวอักษร)">
+        <span class="text-[9px] text-zinc-500 font-mono uppercase">Text</span>
+        <button class="w-3.5 h-3.5 rounded-full bg-zinc-900 border border-white/40 hover:scale-125 transition tb-bar-text-color" data-color="#18181b" title="Dark Text"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-white border border-white/40 hover:scale-125 transition tb-bar-text-color" data-color="#ffffff" title="White Text"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-blue-500 border border-white/40 hover:scale-125 transition tb-bar-text-color" data-color="#2563eb" title="Blue Text"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-rose-500 border border-white/40 hover:scale-125 transition tb-bar-text-color" data-color="#e11d48" title="Red Text"></button>
+      </div>
+
+      <div class="w-px h-3.5 bg-white/[0.1]"></div>
+
+      <!-- Box Background & Border Color Picker -->
+      <div class="flex items-center space-x-1" title="Box & Border Color (สีกรอบและพื้นหลัง)">
+        <span class="text-[9px] text-zinc-500 font-mono uppercase">Box</span>
+        <button class="w-3.5 h-3.5 rounded-full bg-yellow-200 border border-black/20 hover:scale-125 transition tb-bar-box-color" data-bg="#fef08a" data-border="#eab308" title="Yellow"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-blue-200 border border-black/20 hover:scale-125 transition tb-bar-box-color" data-bg="#bfdbfe" data-border="#3b82f6" title="Blue"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-emerald-200 border border-black/20 hover:scale-125 transition tb-bar-box-color" data-bg="#bbf7d0" data-border="#22c55e" title="Green"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-pink-200 border border-black/20 hover:scale-125 transition tb-bar-box-color" data-bg="#fbcfe8" data-border="#ec4899" title="Pink"></button>
+        <button class="w-3.5 h-3.5 rounded-full bg-zinc-900 border border-white/30 hover:scale-125 transition tb-bar-box-color" data-bg="#18181b" data-border="#3f3f46" title="Dark Slate"></button>
+      </div>
+
+      <div class="w-px h-3.5 bg-white/[0.1]"></div>
+
+      <!-- Delete Button -->
+      <button id="tb-bar-delete" class="p-1 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition" title="Delete Textbox (ลบกล่องนี้)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      </button>
+    `;
+
+    document.body.appendChild(this.textboxFormatBar);
+
+    // Font size controls
+    this.textboxFormatBar.querySelector('#tb-bar-size-down')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+      let size = (this.activeTextboxMarkup.data.fontSize || 13) - 1;
+      if (size < 9) size = 9;
+      this.activeTextboxMarkup.data.fontSize = size;
+      const textarea = this.activeTextboxEl.querySelector('.tb-input');
+      if (textarea) textarea.style.fontSize = `${size}px`;
+      this.textboxFormatBar.querySelector('#tb-bar-size-display').textContent = `${size}px`;
+      await db.saveMarkup(this.activeTextboxMarkup);
+    });
+
+    this.textboxFormatBar.querySelector('#tb-bar-size-up')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+      let size = (this.activeTextboxMarkup.data.fontSize || 13) + 1;
+      if (size > 36) size = 36;
+      this.activeTextboxMarkup.data.fontSize = size;
+      const textarea = this.activeTextboxEl.querySelector('.tb-input');
+      if (textarea) textarea.style.fontSize = `${size}px`;
+      this.textboxFormatBar.querySelector('#tb-bar-size-display').textContent = `${size}px`;
+      await db.saveMarkup(this.activeTextboxMarkup);
+    });
+
+    // Bold toggle
+    this.textboxFormatBar.querySelector('#tb-bar-bold')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+      this.activeTextboxMarkup.data.isBold = !this.activeTextboxMarkup.data.isBold;
+      const textarea = this.activeTextboxEl.querySelector('.tb-input');
+      if (textarea) textarea.style.fontWeight = this.activeTextboxMarkup.data.isBold ? 'bold' : 'normal';
+      this._updateFormatBarActiveStyles();
+      await db.saveMarkup(this.activeTextboxMarkup);
+    });
+
+    // Italic toggle
+    this.textboxFormatBar.querySelector('#tb-bar-italic')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+      this.activeTextboxMarkup.data.isItalic = !this.activeTextboxMarkup.data.isItalic;
+      const textarea = this.activeTextboxEl.querySelector('.tb-input');
+      if (textarea) textarea.style.fontStyle = this.activeTextboxMarkup.data.isItalic ? 'italic' : 'normal';
+      this._updateFormatBarActiveStyles();
+      await db.saveMarkup(this.activeTextboxMarkup);
+    });
+
+    // Text color buttons
+    this.textboxFormatBar.querySelectorAll('.tb-bar-text-color').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+        const color = btn.getAttribute('data-color');
+        this.activeTextboxMarkup.data.textColor = color;
+        const textarea = this.activeTextboxEl.querySelector('.tb-input');
+        if (textarea) textarea.style.color = color;
+        await db.saveMarkup(this.activeTextboxMarkup);
+      });
+    });
+
+    // Box & border color buttons
+    this.textboxFormatBar.querySelectorAll('.tb-bar-box-color').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+        const bg = btn.getAttribute('data-bg');
+        const border = btn.getAttribute('data-border');
+        this.activeTextboxMarkup.data.bgColor = bg;
+        this.activeTextboxMarkup.data.borderColor = border;
+        this.activeTextboxEl.style.backgroundColor = bg;
+        this.activeTextboxEl.style.borderColor = border;
+        await db.saveMarkup(this.activeTextboxMarkup);
+      });
+    });
+
+    // Delete button
+    this.textboxFormatBar.querySelector('#tb-bar-delete')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!this.activeTextboxMarkup || !this.activeTextboxEl) return;
+      const mId = this.activeTextboxMarkup.id;
+      await db.deleteMarkup(mId);
+      this.markups = this.markups.filter(m => m.id !== mId);
+      this.activeTextboxEl.remove();
+      this.hideTextboxFormatBar();
+      this.onMarkupDeleted(mId);
+    });
+
+    // Hide formatting bar when clicking outside
+    document.addEventListener('mousedown', (e) => {
+      if (this.textboxFormatBar && !this.textboxFormatBar.contains(e.target) && !e.target.closest('.markup-textbox')) {
+        this.hideTextboxFormatBar();
+      }
+    });
+  }
+
+  showTextboxFormatBar(markup, el) {
+    this.activeTextboxMarkup = markup;
+    this.activeTextboxEl = el;
+
+    document.querySelectorAll('.markup-textbox').forEach(box => box.classList.remove('selected'));
+    el.classList.add('selected');
+
+    const rect = el.getBoundingClientRect();
+    const size = markup.data.fontSize || 13;
+
+    const sizeDisplay = this.textboxFormatBar.querySelector('#tb-bar-size-display');
+    if (sizeDisplay) sizeDisplay.textContent = `${size}px`;
+
+    this._updateFormatBarActiveStyles();
+
+    const topPos = Math.max(12, rect.top - 46);
+    const leftPos = Math.max(180, Math.min(window.innerWidth - 180, rect.left + rect.width / 2));
+
+    this.textboxFormatBar.style.left = `${leftPos}px`;
+    this.textboxFormatBar.style.top = `${topPos}px`;
+    this.textboxFormatBar.style.transform = 'translateX(-50%)';
+    this.textboxFormatBar.classList.remove('hidden');
+  }
+
+  _updateFormatBarActiveStyles() {
+    if (!this.activeTextboxMarkup || !this.textboxFormatBar) return;
+    const boldBtn = this.textboxFormatBar.querySelector('#tb-bar-bold');
+    const italicBtn = this.textboxFormatBar.querySelector('#tb-bar-italic');
+
+    if (boldBtn) {
+      if (this.activeTextboxMarkup.data.isBold) {
+        boldBtn.className = 'w-6 h-6 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center';
+      } else {
+        boldBtn.className = 'w-6 h-6 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.08] font-bold transition text-xs flex items-center justify-center';
+      }
+    }
+
+    if (italicBtn) {
+      if (this.activeTextboxMarkup.data.isItalic) {
+        italicBtn.className = 'w-6 h-6 rounded-lg bg-blue-600 text-white italic font-serif text-xs flex items-center justify-center';
+      } else {
+        italicBtn.className = 'w-6 h-6 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.08] italic font-serif transition text-xs flex items-center justify-center';
+      }
+    }
+  }
+
+  hideTextboxFormatBar() {
+    if (this.textboxFormatBar) {
+      this.textboxFormatBar.classList.add('hidden');
+    }
+    if (this.activeTextboxEl) {
+      this.activeTextboxEl.classList.remove('selected');
+      this.activeTextboxEl = null;
+      this.activeTextboxMarkup = null;
     }
   }
 
@@ -1203,50 +1412,32 @@ export class PDFViewerEngine {
       el.style.height = `${markup.height * 100}%`;
     }
     el.style.backgroundColor = markup.data.bgColor || '#fef08a';
-    el.style.color = markup.data.textColor || '#18181b';
+    el.style.borderColor = markup.data.borderColor || '#eab308';
 
     const currentFontSize = markup.data.fontSize || 13;
+    const isBold = markup.data.isBold || false;
+    const isItalic = markup.data.isItalic || false;
+    const textColor = markup.data.textColor || '#18181b';
 
     el.innerHTML = `
-      <!-- Header Toolbar -->
-      <div class="flex items-center justify-between opacity-0 group-hover:opacity-100 transition mb-1 -mt-1 -mr-1 select-none">
-        <!-- Colors -->
-        <div class="flex items-center space-x-1">
-          <button class="w-3 h-3 rounded-full bg-yellow-200 border border-black/20 btn-tb-color" data-color="#fef08a" title="Yellow"></button>
-          <button class="w-3 h-3 rounded-full bg-blue-200 border border-black/20 btn-tb-color" data-color="#bfdbfe" title="Blue"></button>
-          <button class="w-3 h-3 rounded-full bg-emerald-200 border border-black/20 btn-tb-color" data-color="#bbf7d0" title="Green"></button>
-          <button class="w-3 h-3 rounded-full bg-pink-200 border border-black/20 btn-tb-color" data-color="#fbcfe8" title="Pink"></button>
-        </div>
-
-        <!-- Font Size Controls (A- / A+) -->
-        <div class="flex items-center space-x-0.5 bg-black/10 rounded px-1 py-0.5 mx-1">
-          <button class="px-1 text-[10px] font-bold text-black/60 hover:text-black hover:bg-black/10 rounded transition btn-tb-font-down" title="Decrease Font Size (ลดขนาดตัวหนังสือ)">A-</button>
-          <span class="text-[9px] font-mono text-black/70 font-semibold px-0.5 tb-font-display">${currentFontSize}px</span>
-          <button class="px-1 text-[10px] font-bold text-black/60 hover:text-black hover:bg-black/10 rounded transition btn-tb-font-up" title="Increase Font Size (เพิ่มขนาดตัวหนังสือ)">A+</button>
-        </div>
-
-        <!-- Delete -->
-        <button class="p-0.5 rounded text-black/50 hover:text-black hover:bg-black/10 transition btn-delete-markup" title="Delete Textbox">
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-        </button>
-      </div>
-
-      <textarea class="tb-input" style="font-size: ${currentFontSize}px" placeholder="Type text here...">${markup.data.text || ''}</textarea>
+      <textarea class="tb-input" style="font-size: ${currentFontSize}px; font-weight: ${isBold ? 'bold' : 'normal'}; font-style: ${isItalic ? 'italic' : 'normal'}; color: ${textColor};" placeholder="Type text here...">${markup.data.text || ''}</textarea>
       
       <!-- Resizable Corner Drag Handle -->
-      <div class="tb-resize-handle flex items-center justify-center" title="Drag corner to resize box (ลากมุมเพื่อปรับขนาดกล่อง)">
-        <svg class="w-2.5 h-2.5 text-black/40 hover:text-black/80 transition" viewBox="0 0 24 24" fill="currentColor"><path d="M22 22H20V20H22V22ZM22 16H20V18H22V16ZM18 20H16V22H18V20ZM22 12H20V14H22V12ZM14 20H12V22H14V20ZM18 16H16V18H18V16Z"/></svg>
+      <div class="tb-resize-handle flex items-center justify-center" title="Drag to resize (ลากมุมเพื่อปรับขนาด)">
+        <svg class="w-2.5 h-2.5 text-black/40" viewBox="0 0 24 24" fill="currentColor"><path d="M22 22H20V20H22V22ZM22 16H20V18H22V16ZM18 20H16V22H18V20ZM22 12H20V14H22V12ZM14 20H12V22H14V20ZM18 16H16V18H18V16Z"/></svg>
       </div>
     `;
 
     markupLayer.appendChild(el);
 
     const textarea = el.querySelector('.tb-input');
-    const fontDisplay = el.querySelector('.tb-font-display');
 
     if (autoFocus) {
-      textarea.focus();
-      textarea.select();
+      setTimeout(() => {
+        textarea.focus();
+        textarea.select();
+        this.showTextboxFormatBar(markup, el);
+      }, 50);
     }
 
     textarea.addEventListener('input', () => {
@@ -1254,45 +1445,14 @@ export class PDFViewerEngine {
       db.saveMarkup(markup);
     });
 
-    // Font size controls
-    el.querySelector('.btn-tb-font-down')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      let size = (markup.data.fontSize || 13) - 1;
-      if (size < 9) size = 9;
-      markup.data.fontSize = size;
-      textarea.style.fontSize = `${size}px`;
-      if (fontDisplay) fontDisplay.textContent = `${size}px`;
-      db.saveMarkup(markup);
+    // Show floating format bar on click or focus
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.tb-resize-handle')) return;
+      this.showTextboxFormatBar(markup, el);
     });
 
-    el.querySelector('.btn-tb-font-up')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      let size = (markup.data.fontSize || 13) + 1;
-      if (size > 36) size = 36;
-      markup.data.fontSize = size;
-      textarea.style.fontSize = `${size}px`;
-      if (fontDisplay) fontDisplay.textContent = `${size}px`;
-      db.saveMarkup(markup);
-    });
-
-    // Color buttons
-    el.querySelectorAll('.btn-tb-color').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const color = btn.getAttribute('data-color');
-        el.style.backgroundColor = color;
-        markup.data.bgColor = color;
-        db.saveMarkup(markup);
-      });
-    });
-
-    // Delete button
-    el.querySelector('.btn-delete-markup')?.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await db.deleteMarkup(markup.id);
-      this.markups = this.markups.filter(m => m.id !== markup.id);
-      el.remove();
-      this.onMarkupDeleted(markup.id);
+    textarea.addEventListener('focus', () => {
+      this.showTextboxFormatBar(markup, el);
     });
 
     // Make Draggable
@@ -1317,14 +1477,18 @@ export class PDFViewerEngine {
       window.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
         const pageRect = pageContainer.getBoundingClientRect();
-        const newW = Math.max(90, Math.min(pageRect.width - el.offsetLeft, startW + (e.clientX - startMouseX)));
-        const newH = Math.max(44, Math.min(pageRect.height - el.offsetTop, startH + (e.clientY - startMouseY)));
+        const newW = Math.max(80, Math.min(pageRect.width - el.offsetLeft, startW + (e.clientX - startMouseX)));
+        const newH = Math.max(38, Math.min(pageRect.height - el.offsetTop, startH + (e.clientY - startMouseY)));
 
         el.style.width = `${newW}px`;
         el.style.height = `${newH}px`;
 
         markup.width = newW / pageRect.width;
         markup.height = newH / pageRect.height;
+
+        if (this.activeTextboxEl === el) {
+          this.showTextboxFormatBar(markup, el);
+        }
       });
 
       window.addEventListener('mouseup', async () => {

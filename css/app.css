@@ -175,29 +175,30 @@ body {
   z-index: 10;
 }
 
-/* Interactive Custom Text Box (Fully Resizable with Custom Drag Handles) */
+/* Minimalist Clean Sticky Text Box (Clean card without cluttered inline buttons) */
 .markup-textbox {
   position: absolute;
   pointer-events: auto;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
-  padding: 6px 8px 10px 8px;
-  min-width: 90px;
-  min-height: 44px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  padding: 8px 10px;
+  min-width: 80px;
+  min-height: 40px;
   cursor: move;
-  transition: box-shadow 0.15s ease;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
   z-index: 12;
   box-sizing: border-box;
+  border: 1.5px solid transparent;
 }
 
-.markup-textbox:hover, .markup-textbox:focus-within {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 2px #3b82f6;
-  z-index: 20;
+.markup-textbox.selected, .markup-textbox:focus-within {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 0 0 2px #3b82f6 !important;
+  z-index: 25;
 }
 
 .markup-textbox .tb-input {
   width: 100%;
-  height: calc(100% - 14px);
+  height: 100%;
   min-height: 24px;
   background: transparent;
   border: none;
@@ -210,16 +211,17 @@ body {
 
 .markup-textbox .tb-resize-handle {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 12px;
-  height: 12px;
+  bottom: 1px;
+  right: 1px;
+  width: 14px;
+  height: 14px;
   cursor: se-resize;
-  opacity: 0.4;
+  opacity: 0.3;
   transition: opacity 0.15s ease;
 }
-.markup-textbox:hover .tb-resize-handle {
-  opacity: 1;
+.markup-textbox:hover .tb-resize-handle,
+.markup-textbox:focus-within .tb-resize-handle {
+  opacity: 0.9;
 }
 
 /* Interactive Inserted Image / Figure */
