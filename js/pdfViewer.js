@@ -1,12 +1,22 @@
 /**
  * PDF Viewer & Comprehensive Interactive Annotation / Markup Engine for ThesisMind
- * Features: Multi-color Highlighting, Text Boxes, Image Insertion,
- * Freehand Pen, Shapes, Eraser Tool, Undo, and Page Drawing Clear.
+ * Features: High-performance canvas rendering, detached ArrayBuffer protection,
+ * Smooth Fit Width/Zoom, Multi-color Highlights, Sticky Text Boxes,
+ * Image Insertions, Freehand Pen, Box shapes, and Responsive Pixel-distance Eraser.
  */
 
 import { HighlightColors, MarkupColors, PaperThemes, createHighlight, createSideNote, createMarkupItem } from './models.js';
 import { db } from './db.js';
 import { tts } from './tts.js';
+
+// Distance from point (px, py) to line segment (x1, y1)-(x2, y2)
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+}
 
 export class PDFViewerEngine {
   constructor(containerElement, options = {}) {
@@ -81,7 +91,7 @@ export class PDFViewerEngine {
       </button>
 
       <!-- Eraser Tool (ยางลบ) -->
-      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-rose-300 hover:bg-rose-950/40 active:scale-95" data-tool="eraser" title="Eraser (E) - Click/Drag over drawing to erase">
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-rose-300 hover:bg-rose-950/40 active:scale-95" data-tool="eraser" title="Eraser (E) - Drag over drawing to erase">
         <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
         <span class="hidden sm:inline text-[11px]">Eraser</span>
       </button>
@@ -127,12 +137,10 @@ export class PDFViewerEngine {
       });
     });
 
-    // Undo Drawing
     this.markupDock.querySelector('#btn-undo-drawing')?.addEventListener('click', async () => {
       await this.undoLastDrawing();
     });
 
-    // Image Upload
     const imgInput = this.markupDock.querySelector('#markup-image-input');
     if (imgInput) {
       imgInput.addEventListener('change', async (e) => {
@@ -148,7 +156,6 @@ export class PDFViewerEngine {
       });
     }
 
-    // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'v' || e.key === 'V') this.setTool('select');
@@ -197,7 +204,7 @@ export class PDFViewerEngine {
     drawingCanvases.forEach(c => {
       if (tool === 'pen' || tool === 'rect' || tool === 'eraser') {
         c.classList.add('active');
-        c.style.cursor = tool === 'eraser' ? 'cell' : 'crosshair';
+        c.style.cursor = tool === 'eraser' ? 'pointer' : 'crosshair';
       } else {
         c.classList.remove('active');
         c.style.cursor = 'default';
@@ -529,7 +536,8 @@ export class PDFViewerEngine {
 
       let loadingTask;
       if (paperFile.pdfData instanceof ArrayBuffer) {
-        loadingTask = pdfjsLib.getDocument({ data: paperFile.pdfData });
+        // ALWAYS slice(0) to prevent ArrayBuffer detachment issues!
+        loadingTask = pdfjsLib.getDocument({ data: paperFile.pdfData.slice(0) });
       } else if (typeof paperFile.pdfData === 'string') {
         loadingTask = pdfjsLib.getDocument(paperFile.pdfData);
       } else {
@@ -708,89 +716,86 @@ export class PDFViewerEngine {
     let startX = 0;
     let startY = 0;
 
-    const startDraw = async (e) => {
+    const eraseAtPoint = async (clientX, clientY) => {
       const rect = drawingCanvas.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const clickY = e.clientY - rect.top;
+      const clickX = clientX - rect.left;
+      const clickY = clientY - rect.top;
+      const width = rect.width;
+      const height = rect.height;
 
-      // Handle ERASER tool
-      if (this.activeTool === 'eraser') {
-        const normX = clickX / rect.width;
-        const normY = clickY / rect.height;
+      const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
+      let erasedAny = false;
 
-        // Find drawing markup near click
-        const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
-        for (const m of pageDrawings) {
-          let hit = false;
-          if (m.data.shapeType === 'rect') {
-            if (normX >= m.x && normX <= m.x + m.width && normY >= m.y && normY <= m.y + m.height) {
+      for (const m of pageDrawings) {
+        let hit = false;
+        if (m.data.shapeType === 'rect') {
+          const rx = m.x * width;
+          const ry = m.y * height;
+          const rw = m.width * width;
+          const rh = m.height * height;
+          // Check perimeter of rectangle
+          const dTop = distToSegment(clickX, clickY, rx, ry, rx + rw, ry);
+          const dBottom = distToSegment(clickX, clickY, rx, ry + rh, rx + rw, ry + rh);
+          const dLeft = distToSegment(clickX, clickY, rx, ry, rx, ry + rh);
+          const dRight = distToSegment(clickX, clickY, rx + rw, ry, rx + rw, ry + rh);
+          if (Math.min(dTop, dBottom, dLeft, dRight) <= 20) {
+            hit = true;
+          }
+        } else if (m.data.paths && m.data.paths.length > 0) {
+          // Check distance to any path segment
+          for (let i = 0; i < m.data.paths.length - 1; i++) {
+            const p1 = m.data.paths[i];
+            const p2 = m.data.paths[i + 1];
+            const d = distToSegment(clickX, clickY, p1.x * width, p1.y * height, p2.x * width, p2.y * height);
+            if (d <= 22) {
+              hit = true;
+              break;
+            }
+          }
+          if (!hit && m.data.paths.length === 1) {
+            const p = m.data.paths[0];
+            if (Math.hypot(clickX - p.x * width, clickY - p.y * height) <= 22) {
               hit = true;
             }
-          } else if (m.data.paths) {
-            for (const p of m.data.paths) {
-              const dx = Math.abs(p.x - normX) * rect.width;
-              const dy = Math.abs(p.y - normY) * rect.height;
-              if (Math.sqrt(dx * dx + dy * dy) < 20) {
-                hit = true;
-                break;
-              }
-            }
-          }
-
-          if (hit) {
-            await db.deleteMarkup(m.id);
-            this.markups = this.markups.filter(item => item.id !== m.id);
-            this._redrawPageCanvas(pageNum);
-            break;
           }
         }
+
+        if (hit) {
+          await db.deleteMarkup(m.id);
+          this.markups = this.markups.filter(item => item.id !== m.id);
+          erasedAny = true;
+        }
+      }
+
+      if (erasedAny) {
+        this._redrawPageCanvas(pageNum);
+      }
+    };
+
+    const startDraw = async (e) => {
+      if (this.activeTool === 'eraser') {
+        await eraseAtPoint(e.clientX, e.clientY);
         return;
       }
 
       if (this.activeTool !== 'pen' && this.activeTool !== 'rect') return;
       this.isDrawing = true;
-      startX = clickX;
-      startY = clickY;
+      const rect = drawingCanvas.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
       this.currentDrawingPath = [{ x: startX, y: startY }];
     };
 
     const drawMove = async (e) => {
-      const rect = drawingCanvas.getBoundingClientRect();
-      const curX = e.clientX - rect.left;
-      const curY = e.clientY - rect.top;
-
-      // Eraser drag support
       if (this.activeTool === 'eraser' && (e.buttons === 1)) {
-        const normX = curX / rect.width;
-        const normY = curY / rect.height;
-        const pageDrawings = this.markups.filter(m => m.pageNumber === pageNum && m.type === 'drawing');
-        for (const m of pageDrawings) {
-          let hit = false;
-          if (m.data.shapeType === 'rect') {
-            if (normX >= m.x && normX <= m.x + m.width && normY >= m.y && normY <= m.y + m.height) {
-              hit = true;
-            }
-          } else if (m.data.paths) {
-            for (const p of m.data.paths) {
-              const dx = Math.abs(p.x - normX) * rect.width;
-              const dy = Math.abs(p.y - normY) * rect.height;
-              if (Math.sqrt(dx * dx + dy * dy) < 18) {
-                hit = true;
-                break;
-              }
-            }
-          }
-          if (hit) {
-            await db.deleteMarkup(m.id);
-            this.markups = this.markups.filter(item => item.id !== m.id);
-            this._redrawPageCanvas(pageNum);
-            break;
-          }
-        }
+        await eraseAtPoint(e.clientX, e.clientY);
         return;
       }
 
       if (!this.isDrawing) return;
+      const rect = drawingCanvas.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
 
       if (this.activeTool === 'pen') {
         ctx.strokeStyle = this.activeColor;
@@ -844,7 +849,7 @@ export class PDFViewerEngine {
           await db.saveMarkup(markup);
           this.markups.push(markup);
         }
-      } else if (this.activeTool === 'pen' && this.currentDrawingPath.length > 2) {
+      } else if (this.activeTool === 'pen' && this.currentDrawingPath.length >= 1) {
         const markup = createMarkupItem({
           fileId: this.currentFile.id,
           pageNumber: pageNum,
@@ -975,7 +980,7 @@ export class PDFViewerEngine {
       ctx.strokeStyle = markup.data.strokeColor || '#f87171';
       ctx.lineWidth = markup.data.strokeWidth || 2.5;
       ctx.strokeRect(markup.x * width, markup.y * height, markup.width * width, markup.height * height);
-    } else if (markup.data.paths && markup.data.paths.length > 1) {
+    } else if (markup.data.paths && markup.data.paths.length > 0) {
       ctx.strokeStyle = markup.data.strokeColor || '#f87171';
       ctx.lineWidth = markup.data.strokeWidth || 2.5;
       ctx.lineCap = 'round';
@@ -1072,8 +1077,15 @@ export class PDFViewerEngine {
   async setScale(newScale) {
     if (newScale < 0.5 || newScale > 3.0) return;
     this.scale = newScale;
-    if (this.currentFile) {
-      await this.loadPDF(this.currentFile);
+    
+    // Smooth in-memory re-rendering without reloading pdfDoc!
+    if (this.pdfDoc && this.currentFile) {
+      const savedScrollPage = this.currentPage;
+      this.container.innerHTML = '';
+      for (let num = 1; num <= this.totalPages; num++) {
+        await this._renderPage(num);
+      }
+      this.scrollToPage(savedScrollPage);
     }
   }
 
