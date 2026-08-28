@@ -1,6 +1,5 @@
 /**
- * Global Deep Search Engine & Modal Dialog for ThesisMind
- * Indexes and searches across File names, Tags, Highlights, Side-Notes, and Paper Metadata.
+ * Ultra-Minimalist Command Palette Search Dialog (Raycast / Linear style)
  */
 
 import { db } from './db.js';
@@ -36,20 +35,20 @@ export class GlobalSearchModal {
 
     this.searchIndex = [];
 
-    // Index Files
+    // Files
     for (const f of files) {
       this.searchIndex.push({
         type: 'file',
         fileId: f.id,
         fileName: f.name,
         title: f.name,
-        snippet: `Tags: ${(f.tags || []).join(', ')}`,
+        snippet: (f.tags || []).map(t => `#${t}`).join(' '),
         pageNumber: 1,
-        matchField: 'Filename & Tags'
+        matchField: 'Paper'
       });
     }
 
-    // Index Metadata
+    // Metadata
     for (const m of metadata) {
       const file = files.find(f => f.id === m.fileId);
       if (!file) continue;
@@ -60,25 +59,14 @@ export class GlobalSearchModal {
           fileId: m.fileId,
           fileName: file.name,
           title: m.title,
-          snippet: `Authors: ${m.authors || 'Unknown'} (${m.year || ''}) · ${m.journal || ''}`,
+          snippet: `${m.authors || ''} (${m.year || ''})`,
           pageNumber: 1,
-          matchField: 'Title & Authors'
-        });
-      }
-      if (m.contributions || m.findings || m.abstract) {
-        this.searchIndex.push({
-          type: 'synthesis',
-          fileId: m.fileId,
-          fileName: file.name,
-          title: `Synthesis: ${m.title || file.name}`,
-          snippet: `${m.contributions} ${m.findings} ${m.abstract}`.trim(),
-          pageNumber: 1,
-          matchField: 'Research Synthesis'
+          matchField: 'Metadata'
         });
       }
     }
 
-    // Index Highlights
+    // Highlights
     for (const hl of highlights) {
       const file = files.find(f => f.id === hl.fileId);
       if (!file) continue;
@@ -87,15 +75,15 @@ export class GlobalSearchModal {
         type: 'highlight',
         fileId: hl.fileId,
         fileName: file.name,
-        title: `Highlight (Page ${hl.pageNumber}) in ${file.name}`,
-        snippet: `"${hl.text}"`,
+        title: hl.text,
+        snippet: `Page ${hl.pageNumber} in ${file.name}`,
         pageNumber: hl.pageNumber,
         hlId: hl.id,
-        matchField: 'PDF Highlight'
+        matchField: 'Quote'
       });
     }
 
-    // Index Side-Notes
+    // Notes
     for (const n of notes) {
       const file = files.find(f => f.id === n.fileId);
       if (!file) continue;
@@ -104,11 +92,11 @@ export class GlobalSearchModal {
         type: 'note',
         fileId: n.fileId,
         fileName: file.name,
-        title: `Side-Note (Page ${n.pageNumber}) in ${file.name}`,
-        snippet: n.content,
+        title: n.content,
+        snippet: `Note on Page ${n.pageNumber}`,
         pageNumber: n.pageNumber,
         hlId: n.highlightId,
-        matchField: 'Side-Note'
+        matchField: 'Note'
       });
     }
   }
@@ -133,27 +121,21 @@ export class GlobalSearchModal {
 
   render() {
     this.modal.innerHTML = `
-      <div class="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-slate-950/80 backdrop-blur-md">
-        <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+      <div class="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/60 backdrop-blur-md">
+        <div class="w-full max-w-xl bg-zinc-900 border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100">
           
-          <!-- Search Header Input -->
-          <div class="p-3 border-b border-slate-800 flex items-center space-x-3 bg-slate-950/80">
-            <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <input type="text" id="global-search-input" placeholder="Search files, tags, notes, highlights, citations... (Ctrl+K)" class="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 focus:outline-none" />
-            <kbd class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[10px] border border-slate-700">ESC</kbd>
+          <!-- Search Input -->
+          <div class="px-4 py-3 border-b border-white/[0.06] flex items-center space-x-3 bg-zinc-950/70">
+            <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" id="global-search-input" placeholder="Type to search papers, quotes, notes..." class="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none" />
+            <kbd class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-[9px] border border-white/[0.06]">ESC</kbd>
           </div>
 
-          <!-- Search Results Container -->
-          <div id="search-results-list" class="max-h-[60vh] overflow-y-auto p-2 divide-y divide-slate-800/50">
-            <div class="p-8 text-center text-slate-500">
-              <p class="text-xs">Type a keyword to search across all your research files & annotations.</p>
+          <!-- Results -->
+          <div id="search-results-list" class="max-h-80 overflow-y-auto p-1.5 divide-y divide-white/[0.02]">
+            <div class="p-6 text-center text-zinc-500">
+              <p class="text-xs">Search papers, highlights, notes, and tags</p>
             </div>
-          </div>
-
-          <!-- Search Footer -->
-          <div class="p-2.5 border-t border-slate-800 bg-slate-950/90 text-[11px] text-slate-400 flex items-center justify-between font-mono">
-            <span>Indexed ${this.searchIndex.length} items</span>
-            <span>Use ↑ ↓ to navigate · Enter to jump</span>
           </div>
         </div>
       </div>
@@ -177,8 +159,8 @@ export class GlobalSearchModal {
         const query = input.value.trim().toLowerCase();
         if (!query) {
           resultsContainer.innerHTML = `
-            <div class="p-8 text-center text-slate-500">
-              <p class="text-xs">Type a keyword to search across all your research files & annotations.</p>
+            <div class="p-6 text-center text-zinc-500">
+              <p class="text-xs">Search papers, highlights, notes, and tags</p>
             </div>
           `;
           return;
@@ -188,53 +170,33 @@ export class GlobalSearchModal {
           return (
             (item.fileName && item.fileName.toLowerCase().includes(query)) ||
             (item.title && item.title.toLowerCase().includes(query)) ||
-            (item.snippet && item.snippet.toLowerCase().includes(query)) ||
-            (item.matchField && item.matchField.toLowerCase().includes(query))
+            (item.snippet && item.snippet.toLowerCase().includes(query))
           );
-        }).slice(0, 20);
+        }).slice(0, 15);
 
         if (matches.length === 0) {
           resultsContainer.innerHTML = `
-            <div class="p-8 text-center text-slate-500">
-              <p class="text-xs text-slate-400 font-semibold">No results found for "${query}"</p>
-              <p class="text-[11px] text-slate-500 mt-1">Try another keyword, tag, or author name.</p>
+            <div class="p-6 text-center text-zinc-500">
+              <p class="text-xs font-medium text-zinc-400">No results found for "${query}"</p>
             </div>
           `;
           return;
         }
 
-        const highlightText = (text, q) => {
-          if (!text) return '';
-          const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-          return text.replace(regex, '<mark class="bg-amber-400/30 text-amber-200 px-0.5 rounded">$1</mark>');
-        };
-
         resultsContainer.innerHTML = matches.map((res, index) => {
-          let badgeColor = 'bg-blue-600/20 text-blue-400 border-blue-500/30';
-          if (res.type === 'highlight') badgeColor = 'bg-yellow-600/20 text-yellow-400 border-yellow-500/30';
-          if (res.type === 'note') badgeColor = 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30';
-          if (res.type === 'synthesis') badgeColor = 'bg-purple-600/20 text-purple-400 border-purple-500/30';
-
           return `
-            <div class="p-2.5 rounded-xl hover:bg-slate-800/80 cursor-pointer transition flex items-start space-x-3 search-result-item" data-index="${index}">
-              <div class="mt-0.5">
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono border ${badgeColor}">
-                  ${res.matchField}
-                </span>
-              </div>
+            <div class="px-3 py-2 rounded-xl hover:bg-white/[0.05] cursor-pointer transition flex items-center justify-between space-x-3 search-result-item" data-index="${index}">
               <div class="min-w-0 flex-1">
-                <h4 class="text-xs font-semibold text-slate-200 leading-snug">${highlightText(res.title, query)}</h4>
-                <p class="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">${highlightText(res.snippet, query)}</p>
-                <div class="text-[10px] text-slate-500 mt-1 flex items-center space-x-2">
-                  <span>📄 ${res.fileName}</span>
-                  ${res.pageNumber ? `<span>•</span><span>Page ${res.pageNumber}</span>` : ''}
-                </div>
+                <h4 class="text-xs font-medium text-zinc-200 truncate">${res.title}</h4>
+                <p class="text-[10px] text-zinc-500 truncate mt-0.5">${res.snippet}</p>
               </div>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-zinc-800 text-zinc-400 border border-white/[0.06]">
+                ${res.matchField}
+              </span>
             </div>
           `;
         }).join('');
 
-        // Bind clicks on search results
         resultsContainer.querySelectorAll('.search-result-item').forEach(itemEl => {
           itemEl.addEventListener('click', async () => {
             const idx = parseInt(itemEl.getAttribute('data-index'), 10);
