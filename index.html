@@ -55,14 +55,20 @@
       </div>
     </div>
 
-    <!-- Center: Sleek Command Search Bar (Ctrl+K) -->
-    <div class="flex-1 max-w-sm mx-3">
+    <!-- Center: Sleek Command Search Bar (Ctrl+K) & Audio Playing Indicator -->
+    <div class="flex-1 max-w-sm mx-3 flex items-center space-x-2">
       <button id="btn-open-search" class="w-full px-3 py-1.5 rounded-xl bg-zinc-950/70 hover:bg-zinc-950 border border-white/[0.06] hover:border-white/[0.12] text-xs text-zinc-400 flex items-center justify-between transition group shadow-sm">
         <div class="flex items-center space-x-2 truncate">
           <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
           <span class="text-zinc-400 text-xs">Search...</span>
         </div>
         <kbd class="px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 font-mono text-[9px] border border-white/[0.08]">Ctrl K</kbd>
+      </button>
+
+      <!-- Global Audio Stop Pill (Visible when TTS is speaking) -->
+      <button id="btn-header-tts-stop" class="hidden px-2.5 py-1 rounded-xl bg-rose-600/20 hover:bg-rose-600 border border-rose-500/40 text-rose-300 hover:text-white text-xs font-medium flex items-center space-x-1.5 transition flex-shrink-0 animate-pulse" title="Stop Reading (กดหยุดอ่าน)">
+        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+        <span class="text-[10px] font-mono">Stop</span>
       </button>
     </div>
 

@@ -434,6 +434,8 @@ export class PDFViewerEngine {
     this.activeHighlight = hl;
     const rect = targetElement.getBoundingClientRect();
 
+    const isCurrentlyPlaying = tts.isPlaying && tts.currentText === hl.text.trim();
+
     this.highlightPopover.innerHTML = `
       <div class="flex items-center space-x-1 pr-1.5 border-r border-white/[0.08]">
         ${Object.values(HighlightColors).map(col => `
@@ -441,7 +443,9 @@ export class PDFViewerEngine {
         `).join('')}
       </div>
       <button id="btn-pop-note" class="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white font-medium transition">Note</button>
-      <button id="btn-pop-tts" class="px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white font-medium transition">Read</button>
+      <button id="btn-pop-tts" class="px-2 py-1 rounded-lg ${isCurrentlyPlaying ? 'bg-rose-600 text-white' : 'bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white'} font-medium transition flex items-center space-x-1">
+        ${isCurrentlyPlaying ? `<span>⏹ Stop</span>` : `<span>🔊 Read</span>`}
+      </button>
       <button id="btn-pop-delete" class="px-2 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white font-medium transition">Remove</button>
     `;
 
@@ -464,7 +468,7 @@ export class PDFViewerEngine {
     });
 
     this.highlightPopover.querySelector('#btn-pop-tts')?.addEventListener('click', () => {
-      tts.speak(hl.text);
+      tts.toggleSpeak(hl.text);
       this.hideHighlightPopover();
     });
 

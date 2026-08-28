@@ -1,9 +1,9 @@
 /**
- * ThesisMind Intelligent Speech Synthesis (TTS) Engine
+ * ThesisMind Intelligent Speech Synthesis (TTS) Engine - "F.R.I.D.A.Y." AI Persona
  * Features:
- * - Multi-language support: Thai (th-TH) & English (en) with auto-detection.
- * - "F.R.I.D.A.Y." AI Assistant Voice Persona (Iron Man AI cadence - Irish/British crisp, intelligent tone).
- * - Clean academic text filtering (strips bracketed citations [1], markdown, formulas).
+ * - Dual Language support (Thai & English) tuned to the sleek, crisp, intelligent "F.R.I.D.A.Y." AI tone.
+ * - Instant togglePlay/Stop support (Click to read, click again to stop, or press ESC).
+ * - Text preprocessing for smooth academic cadence (strips bracket citations [1], URLs, markdown).
  */
 
 class TTSEngine {
@@ -16,7 +16,18 @@ class TTSEngine {
     this.currentText = '';
     this.listeners = new Set();
     this.voices = [];
+    
     this._loadVoices();
+    this._initKeyboardShortcut();
+  }
+
+  _initKeyboardShortcut() {
+    window.addEventListener('keydown', (e) => {
+      // ESC stops audio immediately
+      if (e.key === 'Escape' && this.isPlaying) {
+        this.stop();
+      }
+    });
   }
 
   _loadVoices() {
@@ -31,6 +42,13 @@ class TTSEngine {
 
   subscribe(listener) {
     this.listeners.add(listener);
+    // Initial notify
+    listener({
+      isPlaying: this.isPlaying,
+      isPaused: this.isPaused,
+      rate: this.rate,
+      text: this.currentText,
+    });
     return () => this.listeners.delete(listener);
   }
 
@@ -50,24 +68,26 @@ class TTSEngine {
     return /[\u0E00-\u0E7F]/.test(text);
   }
 
-  getThaiVoice() {
+  getThaiFridayVoice() {
     if (!this.voices.length) this._loadVoices();
-    // Prioritize natural Thai female voices
+    // Prioritize natural, articulate Thai female AI voice
     return (
-      this.voices.find(v => v.lang.startsWith('th') && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Premwadee') || v.name.includes('Google'))) ||
+      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Premwadee'))) ||
+      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && v.name.includes('Google')) ||
+      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) ||
       this.voices.find(v => v.lang.startsWith('th') || v.lang.includes('TH')) ||
       null
     );
   }
 
-  getFridayAIVoice() {
+  getEnglishFridayVoice() {
     if (!this.voices.length) this._loadVoices();
     // FRIDAY persona: Irish (en-IE) or British (en-GB) crisp AI assistant voice
     return (
-      // 1. Irish English (FRIDAY original accent)
+      // 1. Irish English (FRIDAY original accent from Iron Man / Kerry Condon)
       this.voices.find(v => (v.lang === 'en-IE' || v.lang.startsWith('en_IE')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Emily') || v.name.includes('Moira'))) ||
       this.voices.find(v => v.lang === 'en-IE' || v.lang.startsWith('en_IE')) ||
-      // 2. British English Female (Libby, Sonia, Victoria, Fiona, Hazel, Google UK)
+      // 2. British English Female (Libby, Sonia, Victoria, Fiona, Google UK)
       this.voices.find(v => (v.lang === 'en-GB' || v.lang.startsWith('en_GB')) && (v.name.includes('Libby') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Sonia') || v.name.includes('Victoria'))) ||
       this.voices.find(v => (v.lang === 'en-GB' || v.lang.startsWith('en_GB')) && (v.name.includes('Google') || v.name.includes('Female') || v.name.includes('Fiona'))) ||
       this.voices.find(v => v.lang === 'en-GB' || v.lang.startsWith('en_GB')) ||
@@ -82,7 +102,7 @@ class TTSEngine {
   _cleanTextForSpeech(text) {
     return text
       .replace(/\[\d+(?:,\s*\d+)*\]/g, '') // remove [1], [2, 3] citations
-      .replace(/\((?:(?:19|20)\d{2}|[A-Z][a-z]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2})\)/g, '') // remove (Author, 2024)
+      .replace(/\((?:(?:19|20)\d{2}|[A-Z][a-z]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2})\)/g, '') // remove (Chen et al., 2024)
       .replace(/https?:\/\/\S+/g, 'link')
       .replace(/[*_#`~>]/g, '') // strip markdown
       .replace(/\s+/g, ' ')
@@ -109,15 +129,16 @@ class TTSEngine {
 
     if (isThai) {
       this.currentUtterance.lang = 'th-TH';
-      const thaiVoice = this.getThaiVoice();
+      const thaiVoice = this.getThaiFridayVoice();
       if (thaiVoice) this.currentUtterance.voice = thaiVoice;
-      this.currentUtterance.pitch = 1.05;
-      this.currentUtterance.rate = this.rate * 1.0;
+      // F.R.I.D.A.Y. Thai Tone: Crisp, intelligent, clear pitch & calm cadence
+      this.currentUtterance.pitch = 1.08;
+      this.currentUtterance.rate = this.rate * 1.02;
     } else {
       this.currentUtterance.lang = 'en-GB';
-      const fridayVoice = this.getFridayAIVoice();
+      const fridayVoice = this.getEnglishFridayVoice();
       if (fridayVoice) this.currentUtterance.voice = fridayVoice;
-      // F.R.I.D.A.Y. AI tone: slightly elevated pitch (1.08) for crisp, clear synthetic delivery
+      // F.R.I.D.A.Y. English Tone: Signature Marvel AI cadence
       this.currentUtterance.pitch = 1.08;
       this.currentUtterance.rate = this.rate * 1.03;
     }
@@ -135,13 +156,24 @@ class TTSEngine {
     };
 
     this.currentUtterance.onerror = (e) => {
-      console.warn('TTS Speech error:', e);
+      console.warn('TTS Speech ended/cancelled:', e);
       this.isPlaying = false;
       this.isPaused = false;
       this.notify();
     };
 
     this.synth.speak(this.currentUtterance);
+  }
+
+  // Toggle speech: If already speaking this text -> STOP. Else -> SPEAK.
+  toggleSpeak(text) {
+    if (this.isPlaying && this.currentText === text.trim()) {
+      this.stop();
+      return false;
+    } else {
+      this.speak(text);
+      return true;
+    }
   }
 
   pause() {

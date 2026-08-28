@@ -141,8 +141,12 @@ export class AnnotationStudio {
                         </div>
 
                         <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                          <button class="p-1 hover:bg-white/[0.08] text-zinc-400 hover:text-emerald-400 rounded-md transition btn-tts-quote" data-text="${encodeURIComponent(hl.text)}" title="Read Aloud">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                          <button class="p-1 hover:bg-white/[0.08] ${tts.isPlaying && tts.currentText === hl.text.trim() ? 'text-rose-400 bg-rose-950/40 opacity-100' : 'text-zinc-400 hover:text-emerald-400'} rounded-md transition btn-tts-quote" data-text="${encodeURIComponent(hl.text)}" title="${tts.isPlaying && tts.currentText === hl.text.trim() ? 'Stop Speech (หยุดอ่าน)' : 'Read Aloud (F.R.I.D.A.Y. Voice)'}">
+                            ${tts.isPlaying && tts.currentText === hl.text.trim() ? `
+                              <svg class="w-3 h-3 animate-pulse text-rose-400" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                            ` : `
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                            `}
                           </button>
                           <button class="p-1 hover:bg-rose-900/40 text-zinc-400 hover:text-rose-400 rounded-md transition btn-delete-hl" data-hl-id="${hl.id}" title="Remove Highlight">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -330,11 +334,12 @@ export class AnnotationStudio {
       });
     });
 
+    // TTS Toggle
     this.container.querySelectorAll('.btn-tts-quote').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const text = decodeURIComponent(btn.getAttribute('data-text'));
-        tts.speak(text);
+        tts.toggleSpeak(text);
       });
     });
 

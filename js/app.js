@@ -286,23 +286,44 @@ class ThesisMindApp {
     const bar = document.getElementById('tts-player-bar');
     const playPauseBtn = document.getElementById('btn-tts-playpause');
     const stopBtn = document.getElementById('btn-tts-stop');
+    const headerStopBtn = document.getElementById('btn-header-tts-stop');
     const rateSelect = document.getElementById('tts-rate-select');
     const textPreview = document.getElementById('tts-text-preview');
 
     tts.subscribe((state) => {
-      if (state.isPlaying || state.isPaused) {
-        bar.classList.remove('hidden');
-        textPreview.textContent = `Reading: "${state.text}"`;
-        playPauseBtn.innerHTML = state.isPlaying
-          ? `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
-          : `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+      if (state.isPlaying) {
+        if (headerStopBtn) headerStopBtn.classList.remove('hidden');
       } else {
-        bar.classList.add('hidden');
+        if (headerStopBtn) headerStopBtn.classList.add('hidden');
+      }
+
+      if (state.isPlaying || state.isPaused) {
+        bar?.classList.remove('hidden');
+        if (textPreview) textPreview.textContent = `F.R.I.D.A.Y.: "${state.text}"`;
+        if (playPauseBtn) {
+          playPauseBtn.innerHTML = state.isPlaying
+            ? `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+            : `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+        }
+      } else {
+        bar?.classList.add('hidden');
+      }
+
+      // Re-render notes tab to refresh playing icon
+      if (this.studio && this.studio.activeTab === 'annotations') {
+        this.studio.render();
       }
     });
 
     playPauseBtn?.addEventListener('click', () => tts.togglePlayPause());
-    stopBtn?.addEventListener('click', () => tts.stop());
+    stopBtn?.addEventListener('click', () => {
+      tts.stop();
+      this.showToast('Stopped reading');
+    });
+    headerStopBtn?.addEventListener('click', () => {
+      tts.stop();
+      this.showToast('Stopped reading');
+    });
     rateSelect?.addEventListener('change', (e) => tts.setRate(parseFloat(e.target.value)));
   }
 
