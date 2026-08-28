@@ -1,6 +1,6 @@
 /**
  * ThesisMind - Core Application Orchestrator
- * Connects PDF Viewer, File Explorer, Annotation Studio, Search, Matrix, and TTS.
+ * Connects PDF Viewer, Markup Engine, File Explorer, Annotation Studio, Search, Matrix, and TTS.
  */
 
 import { db } from './db.js';
@@ -55,7 +55,7 @@ class ThesisMindApp {
       onOpenMatrix: (folderId) => this.matrixModal.open(folderId),
       onExportFolder: async (folderId) => {
         await exportFolderSummary(folderId);
-        this.showToast('Folder Literature Review exported as Markdown!');
+        this.showToast('Folder Review exported as Markdown!');
       }
     });
     this.explorer.init();
@@ -64,15 +64,15 @@ class ThesisMindApp {
   _initViewer() {
     const container = document.getElementById('pdf-canvas-container');
     this.viewer = new PDFViewerEngine(container, {
-      onHighlightCreated: async (hl) => {
+      onHighlightCreated: async () => {
         if (this.studio) await this.studio.loadFile(this.currentFile);
-        this.showToast('Highlight saved!');
+        this.showToast('Highlight saved');
       },
-      onHighlightDeleted: async (hlId) => {
+      onHighlightDeleted: async () => {
         if (this.studio) await this.studio.loadFile(this.currentFile);
-        this.showToast('Highlight removed!');
+        this.showToast('Highlight removed');
       },
-      onHighlightUpdated: async (hl) => {
+      onHighlightUpdated: async () => {
         if (this.studio) await this.studio.loadFile(this.currentFile);
       },
       onHighlightClicked: (hl) => {
@@ -81,6 +81,14 @@ class ThesisMindApp {
           this.studio.loadFile(this.currentFile);
         }
         this.viewer.flashHighlight(hl.id);
+      },
+      onMarkupCreated: async () => {
+        if (this.studio) await this.studio.loadFile(this.currentFile);
+        this.showToast('Markup added');
+      },
+      onMarkupDeleted: async () => {
+        if (this.studio) await this.studio.loadFile(this.currentFile);
+        this.showToast('Markup deleted');
       },
       onPageChanged: (cur, total) => {
         const ind = document.getElementById('page-indicator');
@@ -101,6 +109,14 @@ class ThesisMindApp {
       },
       onUpdateHighlightColor: async (hlId, color) => {
         await this.viewer.updateHighlightColor(hlId, color);
+      },
+      onDeleteMarkup: async (mkId) => {
+        await db.deleteMarkup(mkId);
+        const el = document.getElementById(`markup-${mkId}`);
+        if (el) el.remove();
+        if (this.viewer) {
+          this.viewer.markups = this.viewer.markups.filter(m => m.id !== mkId);
+        }
       },
       onShowToast: (msg) => this.showToast(msg)
     });
@@ -141,18 +157,15 @@ class ThesisMindApp {
   }
 
   _initHeaderEvents() {
-    // Search button
     document.getElementById('btn-open-search')?.addEventListener('click', () => {
       this.searchModal.open();
     });
 
-    // Summary matrix button in header
     document.getElementById('btn-header-matrix')?.addEventListener('click', () => {
       const currentFolderId = this.explorer ? this.explorer.currentFolderId : null;
       this.matrixModal.open(currentFolderId);
     });
 
-    // Sidebar Toggles
     const leftCol = document.getElementById('explorer-col');
     const rightCol = document.getElementById('studio-col');
     const leftResizer = document.getElementById('resizer-left');
@@ -170,7 +183,6 @@ class ThesisMindApp {
       if (rightResizer) rightResizer.style.display = this.rightPanelVisible ? 'block' : 'none';
     });
 
-    // Theme filters (Light, Sepia, Dark)
     const btnThemeNormal = document.getElementById('btn-theme-normal');
     const btnThemeSepia = document.getElementById('btn-theme-sepia');
     const btnThemeDark = document.getElementById('btn-theme-dark');
@@ -179,7 +191,7 @@ class ThesisMindApp {
       [btnThemeNormal, btnThemeSepia, btnThemeDark].forEach(b => b?.classList.remove('bg-blue-600', 'text-white'));
       if (theme === 'light') btnThemeNormal?.classList.add('bg-blue-600', 'text-white');
       if (theme === 'sepia') btnThemeSepia?.classList.add('bg-amber-600', 'text-white');
-      if (theme === 'dark') btnThemeDark?.classList.add('bg-slate-700', 'text-white');
+      if (theme === 'dark') btnThemeDark?.classList.add('bg-zinc-800', 'text-white');
     };
 
     btnThemeNormal?.addEventListener('click', () => {
@@ -200,12 +212,10 @@ class ThesisMindApp {
       updateThemeButtons('dark');
     });
 
-    // PDF Zoom buttons
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => this.viewer.zoomIn());
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => this.viewer.zoomOut());
     document.getElementById('btn-zoom-fit')?.addEventListener('click', () => this.viewer.fitWidth());
 
-    // Page navigation
     document.getElementById('btn-page-prev')?.addEventListener('click', () => {
       if (this.viewer.currentPage > 1) {
         this.viewer.scrollToPage(this.viewer.currentPage - 1);
@@ -239,8 +249,8 @@ class ThesisMindApp {
         bar.classList.remove('hidden');
         textPreview.textContent = `Reading: "${state.text}"`;
         playPauseBtn.innerHTML = state.isPlaying
-          ? `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
-          : `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+          ? `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+          : `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
       } else {
         bar.classList.add('hidden');
       }
@@ -274,11 +284,11 @@ class ThesisMindApp {
 
     window.addEventListener('mousemove', (e) => {
       if (isResizingLeft && explorerCol) {
-        const newWidth = Math.max(220, Math.min(480, e.clientX));
+        const newWidth = Math.max(180, Math.min(420, e.clientX));
         explorerCol.style.width = `${newWidth}px`;
       }
       if (isResizingRight && studioCol) {
-        const newWidth = Math.max(280, Math.min(600, window.innerWidth - e.clientX));
+        const newWidth = Math.max(240, Math.min(550, window.innerWidth - e.clientX));
         studioCol.style.width = `${newWidth}px`;
       }
     });
@@ -302,19 +312,19 @@ class ThesisMindApp {
     if (!toastContainer) return;
 
     const toast = document.createElement('div');
-    toast.className = 'toast-animate flex items-center space-x-2.5 px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 text-xs font-medium shadow-2xl backdrop-blur-xl';
+    toast.className = 'toast-animate flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-white/[0.1] text-zinc-200 text-xs font-medium shadow-2xl backdrop-blur-xl';
     toast.innerHTML = `
-      <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+      <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
       <span>${message}</span>
     `;
 
     toastContainer.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      toast.style.transition = 'all 0.3s ease';
-      setTimeout(() => toast.remove(), 300);
-    }, 2500);
+      toast.style.transform = 'translateY(8px)';
+      toast.style.transition = 'all 0.2s ease';
+      setTimeout(() => toast.remove(), 200);
+    }, 2000);
   }
 }
 

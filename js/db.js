@@ -1,10 +1,10 @@
 /**
  * IndexedDB Database Service for ThesisMind
- * High-performance, offline-first client storage for papers, annotations, and metadata.
+ * High-performance, offline-first client storage for papers, annotations, markups, and metadata.
  */
 
 const DB_NAME = 'ThesisMindDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for markups store
 
 class DatabaseService {
   constructor() {
@@ -46,12 +46,19 @@ class DatabaseService {
           noteStore.createIndex('highlightId', 'highlightId', { unique: false });
         }
 
-        // Scratchpads store (1 per fileId)
+        // Markups store (Text boxes, Images, Drawings, Shapes)
+        if (!db.objectStoreNames.contains('markups')) {
+          const markupStore = db.createObjectStore('markups', { keyPath: 'id' });
+          markupStore.createIndex('fileId', 'fileId', { unique: false });
+          markupStore.createIndex('fileAndPage', ['fileId', 'pageNumber'], { unique: false });
+        }
+
+        // Scratchpads store
         if (!db.objectStoreNames.contains('scratchpads')) {
           db.createObjectStore('scratchpads', { keyPath: 'fileId' });
         }
 
-        // Metadata store (1 per fileId)
+        // Metadata store
         if (!db.objectStoreNames.contains('metadata')) {
           db.createObjectStore('metadata', { keyPath: 'fileId' });
         }
@@ -79,7 +86,6 @@ class DatabaseService {
     return this.db;
   }
 
-  // Generic Helpers
   async getAll(storeName) {
     const db = await this.ready();
     return new Promise((resolve, reject) => {
@@ -136,7 +142,7 @@ class DatabaseService {
     });
   }
 
-  // Specific Domain Methods
+  // Folders
   async getFolders() {
     return this.getAll('folders');
   }
@@ -150,7 +156,6 @@ class DatabaseService {
     const allFolders = await this.getFolders();
     const childFolderIds = [folderId];
     
-    // Find all nested folders
     const findChildren = (pid) => {
       for (const f of allFolders) {
         if (f.parentId === pid) {
@@ -161,7 +166,6 @@ class DatabaseService {
     };
     findChildren(folderId);
 
-    // Find and delete all files in these folders
     const allFiles = await this.getAll('files');
     const filesToDelete = allFiles.filter(f => childFolderIds.includes(f.folderId));
 
@@ -169,12 +173,12 @@ class DatabaseService {
       await this.deleteFileComplete(file.id);
     }
 
-    // Delete the folders
     for (const fid of childFolderIds) {
       await this.delete('folders', fid);
     }
   }
 
+  // Files
   async getFiles(folderId = null) {
     if (folderId === null) {
       return this.getAll('files');
@@ -192,19 +196,23 @@ class DatabaseService {
     await this.delete('scratchpads', fileId);
     await this.delete('metadata', fileId);
 
-    // Delete highlights
     const highlights = await this.getByIndex('highlights', 'fileId', fileId);
     for (const hl of highlights) {
       await this.delete('highlights', hl.id);
     }
 
-    // Delete side notes
     const notes = await this.getByIndex('sideNotes', 'fileId', fileId);
     for (const note of notes) {
       await this.delete('sideNotes', note.id);
     }
+
+    const markups = await this.getByIndex('markups', 'fileId', fileId);
+    for (const mk of markups) {
+      await this.delete('markups', mk.id);
+    }
   }
 
+  // Highlights
   async getHighlights(fileId) {
     return this.getByIndex('highlights', 'fileId', fileId);
   }
@@ -214,7 +222,6 @@ class DatabaseService {
   }
 
   async deleteHighlight(hlId) {
-    // Also delete any notes attached to this highlight
     const notes = await this.getByIndex('sideNotes', 'highlightId', hlId);
     for (const n of notes) {
       await this.delete('sideNotes', n.id);
@@ -222,6 +229,7 @@ class DatabaseService {
     return this.delete('highlights', hlId);
   }
 
+  // Side Notes
   async getSideNotes(fileId) {
     return this.getByIndex('sideNotes', 'fileId', fileId);
   }
@@ -235,6 +243,21 @@ class DatabaseService {
     return this.delete('sideNotes', noteId);
   }
 
+  // Markups (Text boxes, Images, Drawings, Shapes)
+  async getMarkups(fileId) {
+    return this.getByIndex('markups', 'fileId', fileId);
+  }
+
+  async saveMarkup(markup) {
+    markup.updatedAt = new Date().toISOString();
+    return this.put('markups', markup);
+  }
+
+  async deleteMarkup(markupId) {
+    return this.delete('markups', markupId);
+  }
+
+  // Scratchpads
   async getScratchpad(fileId) {
     const res = await this.get('scratchpads', fileId);
     return res ? res.markdownContent : '';
@@ -248,6 +271,7 @@ class DatabaseService {
     });
   }
 
+  // Metadata
   async getMetadata(fileId) {
     return this.get('metadata', fileId);
   }
@@ -257,6 +281,7 @@ class DatabaseService {
     return this.put('metadata', metadata);
   }
 
+  // Settings
   async getSetting(key, defaultValue = null) {
     const item = await this.get('settings', key);
     return item ? item.value : defaultValue;
@@ -264,15 +289,6 @@ class DatabaseService {
 
   async saveSetting(key, value) {
     return this.put('settings', { key, value });
-  }
-
-  async clearAll() {
-    const db = await this.ready();
-    const storeNames = ['folders', 'files', 'highlights', 'sideNotes', 'scratchpads', 'metadata', 'settings'];
-    for (const name of storeNames) {
-      const tx = db.transaction(name, 'readwrite');
-      tx.objectStore(name).clear();
-    }
   }
 }
 

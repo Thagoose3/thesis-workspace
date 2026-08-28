@@ -1,10 +1,10 @@
 /**
- * PDF Viewer & Interactive Annotation Engine for ThesisMind
- * Powered by PDF.js with real Canvas rendering, Text Selection Layer, Multi-color Highlights,
- * and Contextual Highlight Management Popover (Undo/Remove, Change Color, Note, TTS).
+ * PDF Viewer & Comprehensive Interactive Annotation / Markup Engine for ThesisMind
+ * Supports: Real PDF.js Canvas & Text Layer, Multi-color Highlighting,
+ * Custom Sticky Text Boxes, Image/Figure Insertion, Freehand Pen Drawing, and Shapes.
  */
 
-import { HighlightColors, PaperThemes, createHighlight, createSideNote } from './models.js';
+import { HighlightColors, MarkupColors, PaperThemes, createHighlight, createSideNote, createMarkupItem } from './models.js';
 import { db } from './db.js';
 import { tts } from './tts.js';
 
@@ -19,8 +19,18 @@ export class PDFViewerEngine {
     this.currentPage = 1;
     this.totalPages = 0;
     this.highlights = [];
+    this.markups = [];
+    
+    // Active tool mode: 'select' | 'highlight' | 'textbox' | 'image' | 'pen' | 'rect'
+    this.activeTool = 'select';
+    this.activeColor = '#facc15';
+    this.activeStrokeWidth = 2.5;
+    this.isDrawing = false;
+    this.currentDrawingPath = [];
+    
     this.selectionToolbar = null;
     this.highlightPopover = null;
+    this.markupDock = null;
     this.activeSelection = null;
     this.activeHighlight = null;
     
@@ -28,24 +38,165 @@ export class PDFViewerEngine {
     this.onHighlightDeleted = options.onHighlightDeleted || (() => {});
     this.onHighlightUpdated = options.onHighlightUpdated || (() => {});
     this.onHighlightClicked = options.onHighlightClicked || (() => {});
+    this.onMarkupCreated = options.onMarkupCreated || (() => {});
+    this.onMarkupDeleted = options.onMarkupDeleted || (() => {});
     this.onPageChanged = options.onPageChanged || (() => {});
     
     this._initSelectionToolbar();
     this._initHighlightPopover();
+    this._initMarkupDock();
     this._initScrollObserver();
+    this._initClipboardPasteListener();
+  }
+
+  _initMarkupDock() {
+    this.markupDock = document.createElement('div');
+    this.markupDock.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-40 minimal-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1 border border-white/[0.08] select-none text-xs';
+    
+    this.markupDock.innerHTML = `
+      <!-- Tool Buttons -->
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="select" title="Cursor / Text Select (V)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+        <span class="hidden sm:inline text-[11px]">Select</span>
+      </button>
+
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="textbox" title="Add Sticky Text Box (T)">
+        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+        <span class="hidden sm:inline text-[11px]">Text Box</span>
+      </button>
+
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="image" title="Insert Image / Figure (I)">
+        <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <span class="hidden sm:inline text-[11px]">Add Image</span>
+      </button>
+
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="pen" title="Freehand Pen (P)">
+        <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+        <span class="hidden sm:inline text-[11px]">Draw</span>
+      </button>
+
+      <button class="btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95" data-tool="rect" title="Box / Frame">
+        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>
+        <span class="hidden sm:inline text-[11px]">Box</span>
+      </button>
+
+      <!-- Color Swatches -->
+      <div class="flex items-center space-x-1 pl-1.5 border-l border-white/[0.08]">
+        ${MarkupColors.slice(0, 5).map(c => `
+          <button class="btn-markup-color w-4 h-4 rounded-full border border-white/20 transition hover:scale-125" style="background-color: ${c.id}" data-color="${c.id}" title="${c.name}"></button>
+        `).join('')}
+      </div>
+
+      <!-- Hidden file input for Image Upload -->
+      <input type="file" id="markup-image-input" accept="image/*" class="hidden" />
+    `;
+
+    document.body.appendChild(this.markupDock);
+    this._bindMarkupDockEvents();
+    this.setTool('select');
+  }
+
+  _bindMarkupDockEvents() {
+    this.markupDock.querySelectorAll('.btn-tool').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tool = btn.getAttribute('data-tool');
+        if (tool === 'image') {
+          // Trigger file picker
+          const imgInput = this.markupDock.querySelector('#markup-image-input');
+          if (imgInput) imgInput.click();
+        } else {
+          this.setTool(tool);
+        }
+      });
+    });
+
+    this.markupDock.querySelectorAll('.btn-markup-color').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.activeColor = btn.getAttribute('data-color');
+        this.markupDock.querySelectorAll('.btn-markup-color').forEach(b => b.classList.remove('ring-2', 'ring-white', 'scale-110'));
+        btn.classList.add('ring-2', 'ring-white', 'scale-110');
+      });
+    });
+
+    // Handle Image file input
+    const imgInput = this.markupDock.querySelector('#markup-image-input');
+    if (imgInput) {
+      imgInput.addEventListener('change', async (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const dataUrl = event.target.result;
+            await this.insertImageOnPage(this.currentPage, dataUrl, file.name);
+            imgInput.value = '';
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
+
+    // Keyboard Shortcuts (V, T, P, S)
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'v' || e.key === 'V') this.setTool('select');
+      if (e.key === 't' || e.key === 'T') this.setTool('textbox');
+      if (e.key === 'p' || e.key === 'P') this.setTool('pen');
+    });
+  }
+
+  _initClipboardPasteListener() {
+    window.addEventListener('paste', async (e) => {
+      if (!this.currentFile) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            await this.insertImageOnPage(this.currentPage, event.target.result, 'Pasted Figure');
+          };
+          reader.readAsDataURL(blob);
+          break;
+        }
+      }
+    });
+  }
+
+  setTool(tool) {
+    this.activeTool = tool;
+    this.markupDock.querySelectorAll('.btn-tool').forEach(btn => {
+      const isCurrent = btn.getAttribute('data-tool') === tool;
+      if (isCurrent) {
+        btn.className = 'btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition bg-blue-600 text-white shadow-sm scale-105';
+      } else {
+        btn.className = 'btn-tool px-2.5 py-1.5 rounded-xl font-medium flex items-center space-x-1.5 transition text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] active:scale-95';
+      }
+    });
+
+    // Update drawing layer interaction
+    const drawingCanvases = this.container.querySelectorAll('.drawing-canvas');
+    drawingCanvases.forEach(c => {
+      if (tool === 'pen' || tool === 'rect') {
+        c.classList.add('active');
+      } else {
+        c.classList.remove('active');
+      }
+    });
   }
 
   _initSelectionToolbar() {
     this.selectionToolbar = document.createElement('div');
-    this.selectionToolbar.className = 'floating-toolbar fixed z-50 hidden glass-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-slate-700/70 text-xs';
+    this.selectionToolbar.className = 'floating-toolbar fixed z-50 hidden minimal-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-white/[0.1] text-xs';
     
     // Highlight colors
     const colorsContainer = document.createElement('div');
-    colorsContainer.className = 'flex items-center space-x-1 pr-1.5 border-r border-slate-700/70';
+    colorsContainer.className = 'flex items-center space-x-1 pr-1.5 border-r border-white/[0.08]';
 
     Object.values(HighlightColors).forEach(col => {
       const btn = document.createElement('button');
-      btn.className = 'w-6 h-6 rounded-full border border-white/20 transition-all hover:scale-125 active:scale-95 shadow-sm hover:shadow-md';
+      btn.className = 'w-5 h-5 rounded-full border border-white/20 transition-all hover:scale-125 active:scale-95 shadow-sm';
       btn.style.backgroundColor = col.hex;
       btn.title = `Highlight ${col.name}`;
       btn.addEventListener('mousedown', (e) => {
@@ -55,25 +206,19 @@ export class PDFViewerEngine {
       colorsContainer.appendChild(btn);
     });
 
-    // Add Note button
+    // Note button
     const noteBtn = document.createElement('button');
-    noteBtn.className = 'px-2.5 py-1 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center space-x-1.5 transition hover:scale-105 active:scale-95';
-    noteBtn.innerHTML = `
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-      <span>Note</span>
-    `;
+    noteBtn.className = 'px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white font-medium flex items-center space-x-1 transition';
+    noteBtn.innerHTML = `<span>Note</span>`;
     noteBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this._applyHighlightAndNote();
     });
 
-    // TTS Read button
+    // TTS button
     const ttsBtn = document.createElement('button');
-    ttsBtn.className = 'px-2.5 py-1 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium flex items-center space-x-1.5 transition hover:scale-105 active:scale-95';
-    ttsBtn.innerHTML = `
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-      <span>Read</span>
-    `;
+    ttsBtn.className = 'px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white font-medium flex items-center space-x-1 transition';
+    ttsBtn.innerHTML = `<span>Read</span>`;
     ttsBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       if (this.activeSelection && this.activeSelection.text) {
@@ -82,31 +227,15 @@ export class PDFViewerEngine {
       }
     });
 
-    // Copy button
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition hover:scale-105 active:scale-95';
-    copyBtn.title = 'Copy Text';
-    copyBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
-    copyBtn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      if (this.activeSelection && this.activeSelection.text) {
-        navigator.clipboard.writeText(this.activeSelection.text);
-        this.hideSelectionToolbar();
-      }
-    });
-
     this.selectionToolbar.appendChild(colorsContainer);
     this.selectionToolbar.appendChild(noteBtn);
     this.selectionToolbar.appendChild(ttsBtn);
-    this.selectionToolbar.appendChild(copyBtn);
     document.body.appendChild(this.selectionToolbar);
 
-    // Text selection listener
     document.addEventListener('selectionchange', () => {
       this._handleSelectionChange();
     });
 
-    // Dismiss popups on click outside
     document.addEventListener('mousedown', (e) => {
       if (this.selectionToolbar && !this.selectionToolbar.contains(e.target)) {
         if (!window.getSelection()?.isCollapsed) {
@@ -122,9 +251,8 @@ export class PDFViewerEngine {
   }
 
   _initHighlightPopover() {
-    // Popover shown when user clicks on an existing highlight to edit/remove it
     this.highlightPopover = document.createElement('div');
-    this.highlightPopover.className = 'highlight-popover fixed z-50 hidden glass-dropdown rounded-2xl shadow-2xl p-2 flex items-center space-x-2 border border-slate-700/80 text-xs animate-in fade-in zoom-in-95 duration-100';
+    this.highlightPopover.className = 'highlight-popover fixed z-50 hidden minimal-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-white/[0.1] text-xs';
     document.body.appendChild(this.highlightPopover);
   }
 
@@ -133,32 +261,21 @@ export class PDFViewerEngine {
     const rect = targetElement.getBoundingClientRect();
 
     this.highlightPopover.innerHTML = `
-      <div class="flex items-center space-x-1.5 pr-2 border-r border-slate-700/70">
+      <div class="flex items-center space-x-1 pr-1.5 border-r border-white/[0.08]">
         ${Object.values(HighlightColors).map(col => `
-          <button class="btn-change-color w-5 h-5 rounded-full border ${hl.color === col.id ? 'ring-2 ring-white scale-110' : 'border-white/20'} transition hover:scale-125" style="background-color: ${col.hex}" data-color="${col.id}" title="Change to ${col.name}"></button>
+          <button class="btn-change-color w-4 h-4 rounded-full border ${hl.color === col.id ? 'ring-2 ring-white scale-110' : 'border-white/20'} transition hover:scale-125" style="background-color: ${col.hex}" data-color="${col.id}"></button>
         `).join('')}
       </div>
-      <button id="btn-pop-note" class="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center space-x-1 transition" title="Add or Edit Note">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-        <span>Note</span>
-      </button>
-      <button id="btn-pop-tts" class="px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium flex items-center space-x-1 transition" title="Read Aloud">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-        <span>Read</span>
-      </button>
-      <button id="btn-pop-delete" class="px-2.5 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white font-medium flex items-center space-x-1 transition" title="Remove Highlight">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-        <span>Remove</span>
-      </button>
+      <button id="btn-pop-note" class="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white font-medium transition">Note</button>
+      <button id="btn-pop-tts" class="px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white font-medium transition">Read</button>
+      <button id="btn-pop-delete" class="px-2 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white font-medium transition">Remove</button>
     `;
 
-    // Position popover right above the clicked highlight
     this.highlightPopover.style.left = `${Math.max(10, rect.left + rect.width / 2)}px`;
-    this.highlightPopover.style.top = `${Math.max(10, rect.top - 46)}px`;
+    this.highlightPopover.style.top = `${Math.max(10, rect.top - 42)}px`;
     this.highlightPopover.style.transform = 'translateX(-50%)';
     this.highlightPopover.classList.remove('hidden');
 
-    // Bind Popover events
     this.highlightPopover.querySelectorAll('.btn-change-color').forEach(btn => {
       btn.addEventListener('click', async () => {
         const newColor = btn.getAttribute('data-color');
@@ -193,7 +310,6 @@ export class PDFViewerEngine {
     await db.deleteHighlight(hlId);
     this.highlights = this.highlights.filter(h => h.id !== hlId);
     
-    // Remove DOM elements immediately
     const els = document.querySelectorAll(`.highlight-id-${hlId}`);
     els.forEach(el => el.remove());
 
@@ -206,7 +322,6 @@ export class PDFViewerEngine {
     hl.color = newColor;
     await db.saveHighlight(hl);
 
-    // Update DOM colors immediately
     const colorObj = HighlightColors[newColor.toUpperCase()] || HighlightColors.YELLOW;
     const els = document.querySelectorAll(`.highlight-id-${hlId}`);
     els.forEach(el => {
@@ -236,6 +351,8 @@ export class PDFViewerEngine {
   }
 
   _handleSelectionChange() {
+    if (this.activeTool !== 'select') return;
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
       return;
@@ -245,7 +362,6 @@ export class PDFViewerEngine {
     const selectedText = selection.toString().trim();
     if (!selectedText) return;
 
-    // Check if selection is inside this PDF viewer
     const commonAncestor = range.commonAncestorContainer;
     const pageEl = commonAncestor.nodeType === Node.ELEMENT_NODE 
       ? commonAncestor.closest('.pdf-page-container')
@@ -267,9 +383,8 @@ export class PDFViewerEngine {
       rect: rect
     };
 
-    // Position floating selection toolbar
     this.selectionToolbar.style.left = `${rect.left + rect.width / 2}px`;
-    this.selectionToolbar.style.top = `${Math.max(10, rect.top - 48)}px`;
+    this.selectionToolbar.style.top = `${Math.max(10, rect.top - 44)}px`;
     this.selectionToolbar.style.transform = 'translateX(-50%)';
     this.selectionToolbar.classList.remove('hidden');
   }
@@ -353,19 +468,18 @@ export class PDFViewerEngine {
   async loadPDF(paperFile) {
     this.currentFile = paperFile;
     this.container.innerHTML = `
-      <div class="flex flex-col items-center justify-center h-full min-h-[400px] text-slate-400 space-y-3">
-        <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        <p class="text-sm font-medium">Loading document: ${paperFile.name}...</p>
+      <div class="flex flex-col items-center justify-center h-full min-h-[400px] text-zinc-500 space-y-2">
+        <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs font-medium">Loading document...</p>
       </div>
     `;
 
     try {
       this.highlights = await db.getHighlights(paperFile.id);
+      this.markups = await db.getMarkups(paperFile.id);
       
       const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
-      if (!pdfjsLib) {
-        throw new Error('PDF.js library is not loaded');
-      }
+      if (!pdfjsLib) throw new Error('PDF.js library is not loaded');
 
       if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -387,16 +501,15 @@ export class PDFViewerEngine {
       this.container.innerHTML = '';
       this.onPageChanged(this.currentPage, this.totalPages);
 
-      // Render all pages in document order
       for (let num = 1; num <= this.totalPages; num++) {
         await this._renderPage(num);
       }
     } catch (err) {
       console.error('Error loading PDF:', err);
       this.container.innerHTML = `
-        <div class="p-8 text-center text-rose-400 bg-rose-950/20 border border-rose-800/50 rounded-xl m-6">
-          <p class="font-semibold text-base mb-1">Failed to load PDF</p>
-          <p class="text-xs text-slate-400">${err.message}</p>
+        <div class="p-6 text-center text-rose-400 bg-rose-950/20 border border-rose-800/40 rounded-2xl m-6">
+          <p class="font-medium text-xs mb-1">Failed to load PDF</p>
+          <p class="text-[10px] text-zinc-500">${err.message}</p>
         </div>
       `;
     }
@@ -410,9 +523,8 @@ export class PDFViewerEngine {
     const widthPx = Math.floor(viewport.width);
     const heightPx = Math.floor(viewport.height);
 
-    // Page Container with explicit fixed width, height, and flex-shrink-0
     const pageContainer = document.createElement('div');
-    pageContainer.className = `pdf-page-container relative mx-auto my-6 shadow-2xl rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-200 pdf-theme-${this.theme}`;
+    pageContainer.className = `pdf-page-container relative mx-auto my-6 rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-150 pdf-theme-${this.theme}`;
     pageContainer.id = `page-${pageNum}`;
     pageContainer.setAttribute('data-page-number', pageNum);
     pageContainer.style.width = `${widthPx}px`;
@@ -420,7 +532,7 @@ export class PDFViewerEngine {
     pageContainer.style.minWidth = `${widthPx}px`;
     pageContainer.style.minHeight = `${heightPx}px`;
 
-    // Canvas layer with Hi-DPI
+    // Canvas layer
     const canvas = document.createElement('canvas');
     canvas.className = 'block absolute top-0 left-0 z-[1]';
     canvas.width = Math.floor(viewport.width * outputScale);
@@ -428,10 +540,9 @@ export class PDFViewerEngine {
     canvas.style.width = `${widthPx}px`;
     canvas.style.height = `${heightPx}px`;
     const ctx = canvas.getContext('2d');
-
     pageContainer.appendChild(canvas);
 
-    // Text layer for selection
+    // Text layer
     const textLayerDiv = document.createElement('div');
     textLayerDiv.className = 'textLayer';
     textLayerDiv.style.width = `${widthPx}px`;
@@ -442,6 +553,18 @@ export class PDFViewerEngine {
     const highlightLayer = document.createElement('div');
     highlightLayer.className = 'highlight-layer absolute top-0 left-0 w-full h-full pointer-events-none z-[3]';
     pageContainer.appendChild(highlightLayer);
+
+    // Interactive Markup Layer (Text boxes, Images, Figures)
+    const markupLayer = document.createElement('div');
+    markupLayer.className = 'markup-layer';
+    pageContainer.appendChild(markupLayer);
+
+    // Drawing Canvas Layer (Pen & Shapes)
+    const drawingCanvas = document.createElement('canvas');
+    drawingCanvas.className = `drawing-canvas ${this.activeTool === 'pen' || this.activeTool === 'rect' ? 'active' : ''}`;
+    drawingCanvas.width = widthPx;
+    drawingCanvas.height = heightPx;
+    pageContainer.appendChild(drawingCanvas);
 
     this.container.appendChild(pageContainer);
 
@@ -471,6 +594,17 @@ export class PDFViewerEngine {
     pageHighlights.forEach(hl => {
       this._renderHighlightOnPage(pageContainer, hl);
     });
+
+    // Render existing Markups (Textboxes, Images)
+    const pageMarkups = this.markups.filter(m => m.pageNumber === pageNum);
+    pageMarkups.forEach(m => {
+      if (m.type === 'textbox') this._renderTextBox(pageContainer, m);
+      if (m.type === 'image') this._renderImageBox(pageContainer, m);
+      if (m.type === 'drawing') this._renderDrawing(drawingCanvas, m);
+    });
+
+    // Setup interactive events on pageContainer
+    this._bindPageMarkupEvents(pageContainer, drawingCanvas, pageNum);
   }
 
   _renderHighlightOnPage(pageContainer, hl) {
@@ -485,9 +619,8 @@ export class PDFViewerEngine {
         el.style.top = `${rect.top * 100}%`;
         el.style.width = `${rect.width * 100}%`;
         el.style.height = `${rect.height * 100}%`;
-        el.title = `"${hl.text}" — Click to edit or remove`;
+        el.title = hl.text;
         
-        // Click to show contextual highlight popover
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           this.showHighlightPopover(hl, el);
@@ -496,6 +629,332 @@ export class PDFViewerEngine {
         highlightLayer.appendChild(el);
       });
     }
+  }
+
+  _bindPageMarkupEvents(pageContainer, drawingCanvas, pageNum) {
+    // Click on page in 'textbox' mode to place a new Text Box
+    pageContainer.addEventListener('click', async (e) => {
+      if (this.activeTool === 'textbox') {
+        if (e.target.closest('.markup-textbox') || e.target.closest('.markup-image-box')) return;
+        const rect = pageContainer.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+
+        const markup = createMarkupItem({
+          fileId: this.currentFile.id,
+          pageNumber: pageNum,
+          type: 'textbox',
+          x,
+          y,
+          width: 0.28,
+          height: 0.08,
+          data: {
+            text: 'Type your note...',
+            bgColor: '#fef08a',
+            textColor: '#18181b',
+            fontSize: 12
+          }
+        });
+
+        await db.saveMarkup(markup);
+        this.markups.push(markup);
+        this._renderTextBox(pageContainer, markup, true);
+        this.onMarkupCreated(markup);
+        this.setTool('select');
+      }
+    });
+
+    // Drawing Canvas events for Pen / Box mode
+    const ctx = drawingCanvas.getContext('2d');
+    let startX = 0;
+    let startY = 0;
+
+    const startDraw = (e) => {
+      if (this.activeTool !== 'pen' && this.activeTool !== 'rect') return;
+      this.isDrawing = true;
+      const rect = drawingCanvas.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+      this.currentDrawingPath = [{ x: startX, y: startY }];
+    };
+
+    const drawMove = (e) => {
+      if (!this.isDrawing) return;
+      const rect = drawingCanvas.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+
+      if (this.activeTool === 'pen') {
+        ctx.strokeStyle = this.activeColor;
+        ctx.lineWidth = this.activeStrokeWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        const prev = this.currentDrawingPath[this.currentDrawingPath.length - 1];
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(curX, curY);
+        ctx.stroke();
+
+        this.currentDrawingPath.push({ x: curX, y: curY });
+      }
+    };
+
+    const stopDraw = async (e) => {
+      if (!this.isDrawing) return;
+      this.isDrawing = false;
+
+      const rect = drawingCanvas.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+
+      if (this.activeTool === 'rect') {
+        // Draw rectangle
+        const x = Math.min(startX, endX);
+        const y = Math.min(startY, endY);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+
+        if (w > 10 && h > 10) {
+          ctx.strokeStyle = this.activeColor;
+          ctx.lineWidth = this.activeStrokeWidth;
+          ctx.strokeRect(x, y, w, h);
+
+          const markup = createMarkupItem({
+            fileId: this.currentFile.id,
+            pageNumber: pageNum,
+            type: 'drawing',
+            x: x / rect.width,
+            y: y / rect.height,
+            width: w / rect.width,
+            height: h / rect.height,
+            data: {
+              shapeType: 'rect',
+              strokeColor: this.activeColor,
+              strokeWidth: this.activeStrokeWidth
+            }
+          });
+          await db.saveMarkup(markup);
+          this.markups.push(markup);
+        }
+      } else if (this.activeTool === 'pen' && this.currentDrawingPath.length > 2) {
+        const markup = createMarkupItem({
+          fileId: this.currentFile.id,
+          pageNumber: pageNum,
+          type: 'drawing',
+          data: {
+            paths: this.currentDrawingPath.map(p => ({ x: p.x / rect.width, y: p.y / rect.height })),
+            strokeColor: this.activeColor,
+            strokeWidth: this.activeStrokeWidth
+          }
+        });
+        await db.saveMarkup(markup);
+        this.markups.push(markup);
+      }
+    };
+
+    drawingCanvas.addEventListener('mousedown', startDraw);
+    drawingCanvas.addEventListener('mousemove', drawMove);
+    drawingCanvas.addEventListener('mouseup', stopDraw);
+    drawingCanvas.addEventListener('mouseleave', stopDraw);
+  }
+
+  _renderTextBox(pageContainer, markup, autoFocus = false) {
+    const markupLayer = pageContainer.querySelector('.markup-layer') || pageContainer;
+
+    const el = document.createElement('div');
+    el.className = 'markup-textbox group';
+    el.id = `markup-${markup.id}`;
+    el.style.left = `${markup.x * 100}%`;
+    el.style.top = `${markup.y * 100}%`;
+    el.style.width = `${markup.width * 100}%`;
+    el.style.backgroundColor = markup.data.bgColor || '#fef08a';
+    el.style.color = markup.data.textColor || '#18181b';
+
+    el.innerHTML = `
+      <div class="flex items-center justify-between opacity-0 group-hover:opacity-100 transition mb-1 -mt-1 -mr-1">
+        <div class="flex items-center space-x-1">
+          <button class="w-3 h-3 rounded-full bg-yellow-200 border border-black/20 btn-tb-color" data-color="#fef08a"></button>
+          <button class="w-3 h-3 rounded-full bg-blue-200 border border-black/20 btn-tb-color" data-color="#bfdbfe"></button>
+          <button class="w-3 h-3 rounded-full bg-emerald-200 border border-black/20 btn-tb-color" data-color="#bbf7d0"></button>
+          <button class="w-3 h-3 rounded-full bg-pink-200 border border-black/20 btn-tb-color" data-color="#fbcfe8"></button>
+        </div>
+        <button class="p-0.5 rounded text-black/50 hover:text-black hover:bg-black/10 transition btn-delete-markup">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <textarea class="tb-input" rows="2" style="font-size: ${markup.data.fontSize || 12}px">${markup.data.text || ''}</textarea>
+    `;
+
+    markupLayer.appendChild(el);
+
+    const textarea = el.querySelector('.tb-input');
+    if (autoFocus) {
+      textarea.focus();
+      textarea.select();
+    }
+
+    // Auto-save on typing
+    textarea.addEventListener('input', () => {
+      markup.data.text = textarea.value;
+      db.saveMarkup(markup);
+    });
+
+    // Change color
+    el.querySelectorAll('.btn-tb-color').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const color = btn.getAttribute('data-color');
+        el.style.backgroundColor = color;
+        markup.data.bgColor = color;
+        db.saveMarkup(markup);
+      });
+    });
+
+    // Delete Textbox
+    el.querySelector('.btn-delete-markup')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await db.deleteMarkup(markup.id);
+      this.markups = this.markups.filter(m => m.id !== markup.id);
+      el.remove();
+      this.onMarkupDeleted(markup.id);
+    });
+
+    // Dragging mechanism
+    this._makeDraggable(el, pageContainer, markup);
+  }
+
+  _renderImageBox(pageContainer, markup) {
+    const markupLayer = pageContainer.querySelector('.markup-layer') || pageContainer;
+
+    const el = document.createElement('div');
+    el.className = 'markup-image-box group';
+    el.id = `markup-${markup.id}`;
+    el.style.left = `${markup.x * 100}%`;
+    el.style.top = `${markup.y * 100}%`;
+    el.style.width = `${markup.width * 100}%`;
+
+    el.innerHTML = `
+      <div class="relative">
+        <img src="${markup.data.src}" alt="Figure" class="rounded-md object-contain max-h-64" />
+        <button class="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition btn-delete-img">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <input type="text" class="w-full mt-1 px-1.5 py-0.5 bg-black/50 rounded text-[10px] font-mono text-zinc-300 text-center border-none focus:outline-none placeholder-zinc-600" value="${markup.data.caption || ''}" placeholder="Figure caption..." />
+    `;
+
+    markupLayer.appendChild(el);
+
+    const captionInput = el.querySelector('input');
+    captionInput?.addEventListener('input', () => {
+      markup.data.caption = captionInput.value;
+      db.saveMarkup(markup);
+    });
+
+    el.querySelector('.btn-delete-img')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await db.deleteMarkup(markup.id);
+      this.markups = this.markups.filter(m => m.id !== markup.id);
+      el.remove();
+      this.onMarkupDeleted(markup.id);
+    });
+
+    this._makeDraggable(el, pageContainer, markup);
+  }
+
+  _renderDrawing(canvas, markup) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    if (markup.data.shapeType === 'rect') {
+      ctx.strokeStyle = markup.data.strokeColor || '#f87171';
+      ctx.lineWidth = markup.data.strokeWidth || 2.5;
+      ctx.strokeRect(markup.x * width, markup.y * height, markup.width * width, markup.height * height);
+    } else if (markup.data.paths && markup.data.paths.length > 1) {
+      ctx.strokeStyle = markup.data.strokeColor || '#f87171';
+      ctx.lineWidth = markup.data.strokeWidth || 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      const p0 = markup.data.paths[0];
+      ctx.moveTo(p0.x * width, p0.y * height);
+      for (let i = 1; i < markup.data.paths.length; i++) {
+        const p = markup.data.paths[i];
+        ctx.lineTo(p.x * width, p.y * height);
+      }
+      ctx.stroke();
+    }
+  }
+
+  _makeDraggable(element, container, markup) {
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let elemStartX = 0, elemStartY = 0;
+
+    element.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      elemStartX = element.offsetLeft;
+      elemStartY = element.offsetTop;
+      element.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const containerRect = container.getBoundingClientRect();
+
+      const newLeft = Math.max(0, Math.min(containerRect.width - element.offsetWidth, elemStartX + dx));
+      const newTop = Math.max(0, Math.min(containerRect.height - element.offsetHeight, elemStartY + dy));
+
+      element.style.left = `${newLeft}px`;
+      element.style.top = `${newTop}px`;
+      element.style.transform = 'none';
+
+      markup.x = newLeft / containerRect.width;
+      markup.y = newTop / containerRect.height;
+    });
+
+    window.addEventListener('mouseup', async () => {
+      if (isDragging) {
+        isDragging = false;
+        element.style.cursor = 'move';
+        await db.saveMarkup(markup);
+      }
+    });
+  }
+
+  async insertImageOnPage(pageNum, srcDataUrl, caption = '') {
+    if (!this.currentFile) return;
+
+    const pageContainer = document.getElementById(`page-${pageNum}`);
+    if (!pageContainer) return;
+
+    const markup = createMarkupItem({
+      fileId: this.currentFile.id,
+      pageNumber: pageNum,
+      type: 'image',
+      x: 0.2,
+      y: 0.3,
+      width: 0.45,
+      height: 0.3,
+      data: {
+        src: srcDataUrl,
+        caption: caption || 'Inserted Figure'
+      }
+    });
+
+    await db.saveMarkup(markup);
+    this.markups.push(markup);
+    this._renderImageBox(pageContainer, markup);
+    this.onMarkupCreated(markup);
   }
 
   setTheme(theme) {
@@ -546,7 +1005,7 @@ export class PDFViewerEngine {
     const els = document.querySelectorAll(`.highlight-id-${hlId}`);
     els.forEach(el => {
       el.classList.add('highlight-flash');
-      setTimeout(() => el.classList.remove('highlight-flash'), 1300);
+      setTimeout(() => el.classList.remove('highlight-flash'), 1000);
     });
   }
 }
