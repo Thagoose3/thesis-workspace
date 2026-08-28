@@ -1205,29 +1205,45 @@ export class PDFViewerEngine {
     el.style.backgroundColor = markup.data.bgColor || '#fef08a';
     el.style.color = markup.data.textColor || '#18181b';
 
+    const currentFontSize = markup.data.fontSize || 13;
+
     el.innerHTML = `
-      <div class="flex items-center justify-between opacity-0 group-hover:opacity-100 transition mb-1 -mt-1 -mr-1">
+      <!-- Header Toolbar -->
+      <div class="flex items-center justify-between opacity-0 group-hover:opacity-100 transition mb-1 -mt-1 -mr-1 select-none">
+        <!-- Colors -->
         <div class="flex items-center space-x-1">
-          <button class="w-3 h-3 rounded-full bg-yellow-200 border border-black/20 btn-tb-color" data-color="#fef08a"></button>
-          <button class="w-3 h-3 rounded-full bg-blue-200 border border-black/20 btn-tb-color" data-color="#bfdbfe"></button>
-          <button class="w-3 h-3 rounded-full bg-emerald-200 border border-black/20 btn-tb-color" data-color="#bbf7d0"></button>
-          <button class="w-3 h-3 rounded-full bg-pink-200 border border-black/20 btn-tb-color" data-color="#fbcfe8"></button>
+          <button class="w-3 h-3 rounded-full bg-yellow-200 border border-black/20 btn-tb-color" data-color="#fef08a" title="Yellow"></button>
+          <button class="w-3 h-3 rounded-full bg-blue-200 border border-black/20 btn-tb-color" data-color="#bfdbfe" title="Blue"></button>
+          <button class="w-3 h-3 rounded-full bg-emerald-200 border border-black/20 btn-tb-color" data-color="#bbf7d0" title="Green"></button>
+          <button class="w-3 h-3 rounded-full bg-pink-200 border border-black/20 btn-tb-color" data-color="#fbcfe8" title="Pink"></button>
         </div>
-        <button class="p-0.5 rounded text-black/50 hover:text-black hover:bg-black/10 transition btn-delete-markup">
+
+        <!-- Font Size Controls (A- / A+) -->
+        <div class="flex items-center space-x-0.5 bg-black/10 rounded px-1 py-0.5 mx-1">
+          <button class="px-1 text-[10px] font-bold text-black/60 hover:text-black hover:bg-black/10 rounded transition btn-tb-font-down" title="Decrease Font Size (ลดขนาดตัวหนังสือ)">A-</button>
+          <span class="text-[9px] font-mono text-black/70 font-semibold px-0.5 tb-font-display">${currentFontSize}px</span>
+          <button class="px-1 text-[10px] font-bold text-black/60 hover:text-black hover:bg-black/10 rounded transition btn-tb-font-up" title="Increase Font Size (เพิ่มขนาดตัวหนังสือ)">A+</button>
+        </div>
+
+        <!-- Delete -->
+        <button class="p-0.5 rounded text-black/50 hover:text-black hover:bg-black/10 transition btn-delete-markup" title="Delete Textbox">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
-      <textarea class="tb-input" rows="2" style="font-size: ${markup.data.fontSize || 12}px">${markup.data.text || ''}</textarea>
+
+      <textarea class="tb-input" style="font-size: ${currentFontSize}px" placeholder="Type text here...">${markup.data.text || ''}</textarea>
       
-      <!-- Resizable Corner Handle -->
-      <div class="tb-resize-handle" title="Drag to resize (ลากปรับขนาดได้ตามต้องการ)">
-        <svg class="w-2.5 h-2.5 text-black/40" viewBox="0 0 24 24" fill="currentColor"><path d="M22 22H20V20H22V22ZM22 16H20V18H22V16ZM18 20H16V22H18V20ZM22 12H20V14H22V12ZM14 20H12V22H14V20ZM18 16H16V18H18V16Z"/></svg>
+      <!-- Resizable Corner Drag Handle -->
+      <div class="tb-resize-handle flex items-center justify-center" title="Drag corner to resize box (ลากมุมเพื่อปรับขนาดกล่อง)">
+        <svg class="w-2.5 h-2.5 text-black/40 hover:text-black/80 transition" viewBox="0 0 24 24" fill="currentColor"><path d="M22 22H20V20H22V22ZM22 16H20V18H22V16ZM18 20H16V22H18V20ZM22 12H20V14H22V12ZM14 20H12V22H14V20ZM18 16H16V18H18V16Z"/></svg>
       </div>
     `;
 
     markupLayer.appendChild(el);
 
     const textarea = el.querySelector('.tb-input');
+    const fontDisplay = el.querySelector('.tb-font-display');
+
     if (autoFocus) {
       textarea.focus();
       textarea.select();
@@ -1238,6 +1254,28 @@ export class PDFViewerEngine {
       db.saveMarkup(markup);
     });
 
+    // Font size controls
+    el.querySelector('.btn-tb-font-down')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let size = (markup.data.fontSize || 13) - 1;
+      if (size < 9) size = 9;
+      markup.data.fontSize = size;
+      textarea.style.fontSize = `${size}px`;
+      if (fontDisplay) fontDisplay.textContent = `${size}px`;
+      db.saveMarkup(markup);
+    });
+
+    el.querySelector('.btn-tb-font-up')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let size = (markup.data.fontSize || 13) + 1;
+      if (size > 36) size = 36;
+      markup.data.fontSize = size;
+      textarea.style.fontSize = `${size}px`;
+      if (fontDisplay) fontDisplay.textContent = `${size}px`;
+      db.saveMarkup(markup);
+    });
+
+    // Color buttons
     el.querySelectorAll('.btn-tb-color').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1248,6 +1286,7 @@ export class PDFViewerEngine {
       });
     });
 
+    // Delete button
     el.querySelector('.btn-delete-markup')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       await db.deleteMarkup(markup.id);
@@ -1259,7 +1298,7 @@ export class PDFViewerEngine {
     // Make Draggable
     this._makeDraggable(el, pageContainer, markup);
 
-    // Make Resizable
+    // Make Resizable via interactive drag handle
     const resizeHandle = el.querySelector('.tb-resize-handle');
     if (resizeHandle) {
       let isResizing = false;
