@@ -15,15 +15,6 @@
           fontFamily: {
             sans: ['Plus Jakarta Sans', 'sans-serif'],
             mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            brand: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-            }
           }
         }
       }
@@ -39,59 +30,73 @@
   <!-- Custom Styles -->
   <link rel="stylesheet" href="./css/app.css">
 </head>
-<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col select-none overflow-hidden">
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col select-none overflow-hidden antialiased">
 
-  <!-- ================= TOP APP HEADER ================= -->
-  <header class="h-14 bg-slate-900/90 border-b border-slate-800 px-4 flex items-center justify-between flex-shrink-0 z-30 backdrop-blur-md">
-    <!-- Brand Info -->
-    <div class="flex items-center space-x-3">
-      <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-      </div>
-      <div>
-        <h1 class="text-sm font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-blue-300 bg-clip-text text-transparent">ThesisMind</h1>
-        <p class="text-[10px] text-slate-400 font-mono">Thesis Reading & Literature Review Workspace</p>
+  <!-- ================= TOP MODERN APP HEADER ================= -->
+  <header class="h-14 bg-slate-900/95 border-b border-slate-800/80 px-3.5 flex items-center justify-between flex-shrink-0 z-30 backdrop-blur-xl">
+    
+    <!-- Left: Brand + Toggle Sidebars -->
+    <div class="flex items-center space-x-2.5">
+      <button id="btn-toggle-left-panel" class="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition" title="Toggle File Explorer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+      </button>
+
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+        </div>
+        <div class="hidden sm:block">
+          <h1 class="text-sm font-bold tracking-tight text-white leading-none">ThesisMind</h1>
+          <p class="text-[10px] text-slate-400 font-mono mt-0.5">Research & Literature Review Studio</p>
+        </div>
       </div>
     </div>
 
-    <!-- Center Search Bar (Trigger for Ctrl+K Modal) -->
-    <button id="btn-open-search" class="w-96 max-w-md px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-slate-600 text-xs text-slate-400 flex items-center justify-between transition shadow-inner">
-      <div class="flex items-center space-x-2 truncate">
-        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        <span class="truncate">Search papers, highlights, notes, citations...</span>
-      </div>
-      <kbd class="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[10px] border border-slate-700">Ctrl+K</kbd>
-    </button>
+    <!-- Center: Global Deep Search Button (Ctrl+K) -->
+    <div class="flex-1 max-w-lg mx-4">
+      <button id="btn-open-search" class="w-full px-3.5 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs text-slate-400 flex items-center justify-between transition shadow-inner">
+        <div class="flex items-center space-x-2 truncate">
+          <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          <span class="truncate">Search papers, highlights, notes, citations...</span>
+        </div>
+        <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">Ctrl+K</kbd>
+      </button>
+    </div>
 
-    <!-- Header Actions & Eye-Care Filters -->
-    <div class="flex items-center space-x-3">
-      <!-- Eye-Care Filter Selector -->
-      <div class="flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700 text-xs">
-        <button id="btn-theme-normal" class="px-2.5 py-1 rounded-md text-xs font-medium bg-blue-600 text-white transition flex items-center space-x-1" title="Standard White Paper">
-          <span>☀️ Normal</span>
+    <!-- Right: Reading Mode Pills & Main Action Buttons -->
+    <div class="flex items-center space-x-2">
+      <!-- Theme Switcher -->
+      <div class="flex items-center bg-slate-950/80 p-0.5 rounded-xl border border-slate-800 text-xs">
+        <button id="btn-theme-normal" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-600 text-white transition" title="Standard White Paper">
+          <span>☀️ Light</span>
         </button>
-        <button id="btn-theme-sepia" class="px-2.5 py-1 rounded-md text-xs font-medium text-amber-300 hover:text-amber-200 transition flex items-center space-x-1" title="Sepia Eye-Care Warm Tone">
+        <button id="btn-theme-sepia" class="px-2.5 py-1 rounded-lg text-xs font-medium text-amber-300 hover:text-amber-200 transition" title="Sepia Eye-Care Mode">
           <span>📜 Sepia</span>
         </button>
-        <button id="btn-theme-dark" class="px-2.5 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 transition flex items-center space-x-1" title="Dark Mode High Contrast">
+        <button id="btn-theme-dark" class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition" title="Dark Mode">
           <span>🌙 Dark</span>
         </button>
       </div>
 
-      <!-- Firebase / Cloud Status Button -->
-      <button id="btn-open-settings" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-medium flex items-center space-x-1.5 transition" title="Firebase Settings & Sync">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span class="hidden sm:inline">Offline / Sync</span>
+      <!-- Summary Matrix Button -->
+      <button id="btn-header-matrix" class="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium flex items-center space-x-1.5 transition" title="Literature Review Comparison Table">
+        <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        <span class="hidden md:inline">Summary Matrix</span>
+      </button>
+
+      <!-- Toggle Right Panel -->
+      <button id="btn-toggle-right-panel" class="p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition" title="Toggle Notes & Citation Panel">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </button>
     </div>
   </header>
 
   <!-- ================= FLOATING TTS AUDIO BAR ================= -->
-  <div id="tts-player-bar" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 glass-dropdown rounded-2xl shadow-2xl px-4 py-2 flex items-center space-x-3 border border-slate-700">
-    <div class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+  <div id="tts-player-bar" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 glass-dropdown rounded-2xl shadow-2xl px-4 py-2.5 flex items-center space-x-3 border border-slate-700">
+    <div class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center animate-pulse">
       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
     </div>
-    <div class="max-w-xs min-w-[180px] truncate">
+    <div class="max-w-xs min-w-[200px] truncate">
       <p id="tts-text-preview" class="text-xs text-slate-200 truncate italic">Reading text...</p>
     </div>
     <div class="flex items-center space-x-1.5 border-l border-slate-700 pl-3">
@@ -113,109 +118,80 @@
   <!-- ================= 3-COLUMN MAIN WORKSPACE ================= -->
   <main class="flex-1 flex overflow-hidden relative">
 
-    <!-- Column 1: Windows-style File Explorer (Left) -->
-    <section id="explorer-col" class="w-72 min-w-[220px] max-w-[480px] h-full flex-shrink-0 flex flex-col">
+    <!-- Column 1: Explorer Sidebar (Left) -->
+    <aside id="explorer-col" class="w-72 min-w-[220px] max-w-[480px] h-full flex-shrink-0 flex flex-col transition-all duration-200">
       <div id="explorer-container" class="h-full"></div>
-    </section>
+    </aside>
 
     <!-- Left Resizer Bar -->
-    <div id="resizer-left" class="resizer-h bg-slate-800 hover:bg-blue-500"></div>
+    <div id="resizer-left" class="resizer-h bg-slate-800/80 hover:bg-blue-500"></div>
 
-    <!-- Column 2: In-Browser PDF Reading Studio (Center) -->
-    <section id="reader-col" class="flex-1 h-full flex flex-col bg-slate-950 overflow-hidden min-w-[350px]">
-      <!-- PDF Top Control Bar -->
-      <div id="pdf-toolbar" class="h-10 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between flex-shrink-0 text-xs text-slate-300 opacity-40 pointer-events-none transition">
-        <!-- Current File Title -->
-        <div class="flex items-center space-x-2 truncate max-w-sm">
-          <svg class="w-3.5 h-3.5 text-rose-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5z"/></svg>
-          <span id="current-file-title" class="font-medium text-slate-200 truncate">No Document Loaded</span>
+    <!-- Column 2: PDF Reading Studio (Center) -->
+    <section id="reader-col" class="flex-1 h-full flex flex-col bg-slate-950 overflow-hidden min-w-[320px] relative">
+      
+      <!-- Minimal Floating PDF Toolbar -->
+      <div id="pdf-toolbar" class="h-11 bg-slate-900/90 border-b border-slate-800/80 px-4 flex items-center justify-between flex-shrink-0 text-xs text-slate-300 backdrop-blur-md">
+        <!-- Document Title -->
+        <div class="flex items-center space-x-2 truncate max-w-md">
+          <div class="w-5 h-5 rounded bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 text-[10px] font-bold">PDF</div>
+          <span id="current-file-title" class="font-semibold text-slate-200 truncate">No Document Selected</span>
         </div>
 
-        <!-- Page Controls & Zoom Toolbar -->
-        <div class="flex items-center space-x-2">
-          <!-- Page Prev / Next / Input -->
-          <div class="flex items-center space-x-1 bg-slate-800/80 px-1.5 py-0.5 rounded-lg border border-slate-700/80">
-            <button id="btn-page-prev" class="p-1 rounded hover:bg-slate-700 text-slate-300 transition" title="Previous Page">
+        <!-- Controls: Pages & Zoom -->
+        <div class="flex items-center space-x-2.5">
+          <!-- Page Controls -->
+          <div class="flex items-center space-x-1 bg-slate-950/80 px-2 py-1 rounded-xl border border-slate-800">
+            <button id="btn-page-prev" class="p-0.5 rounded hover:bg-slate-800 text-slate-300 transition" title="Previous Page">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
             </button>
             <span class="text-[11px] font-mono text-slate-400">Page</span>
-            <input type="number" id="page-input" min="1" value="1" class="w-8 px-1 py-0.5 bg-slate-900 text-center text-[11px] font-mono rounded border border-slate-700 focus:outline-none text-slate-200" />
+            <input type="number" id="page-input" min="1" value="1" class="w-8 px-1 py-0.5 bg-slate-900 text-center text-[11px] font-mono rounded border border-slate-700 text-slate-200 focus:outline-none" />
             <span id="page-indicator" class="text-[11px] font-mono text-slate-400">/ 1</span>
-            <button id="btn-page-next" class="p-1 rounded hover:bg-slate-700 text-slate-300 transition" title="Next Page">
+            <button id="btn-page-next" class="p-0.5 rounded hover:bg-slate-800 text-slate-300 transition" title="Next Page">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </button>
           </div>
 
           <!-- Zoom Controls -->
-          <div class="flex items-center space-x-1 bg-slate-800/80 px-1 py-0.5 rounded-lg border border-slate-700/80">
-            <button id="btn-zoom-out" class="p-1 rounded hover:bg-slate-700 text-slate-300 transition" title="Zoom Out">
+          <div class="flex items-center space-x-1 bg-slate-950/80 px-1.5 py-1 rounded-xl border border-slate-800">
+            <button id="btn-zoom-out" class="p-0.5 rounded hover:bg-slate-800 text-slate-300 transition" title="Zoom Out">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
             </button>
-            <button id="btn-zoom-fit" class="px-2 py-0.5 rounded hover:bg-slate-700 text-slate-300 text-[11px] font-mono transition" title="Fit to Width">Fit</button>
-            <button id="btn-zoom-in" class="p-1 rounded hover:bg-slate-700 text-slate-300 transition" title="Zoom In">
+            <button id="btn-zoom-fit" class="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-300 text-[10px] font-mono transition" title="Fit to Width">Fit</button>
+            <button id="btn-zoom-in" class="p-0.5 rounded hover:bg-slate-800 text-slate-300 transition" title="Zoom In">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- PDF Canvas Viewport -->
-      <div id="pdf-canvas-container" class="flex-1 overflow-auto p-4 flex flex-col items-center bg-slate-950/70 select-text">
+      <!-- PDF Canvas Viewport Container -->
+      <div id="pdf-canvas-container" class="flex-1 overflow-auto p-6 flex flex-col items-center bg-slate-950/70 select-text">
         <div class="flex flex-col items-center justify-center h-full text-slate-500 space-y-3">
-          <svg class="w-12 h-12 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <p class="text-xs">Select a thesis paper from the left panel to begin reading</p>
+          <div class="w-16 h-16 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 shadow-xl">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <p class="text-xs font-medium text-slate-400">Select a thesis paper from the left panel to begin reading</p>
         </div>
       </div>
     </section>
 
     <!-- Right Resizer Bar -->
-    <div id="resizer-right" class="resizer-h bg-slate-800 hover:bg-blue-500"></div>
+    <div id="resizer-right" class="resizer-h bg-slate-800/80 hover:bg-blue-500"></div>
 
     <!-- Column 3: Annotation Studio, Notes & Citations (Right) -->
-    <section id="studio-col" class="w-96 min-w-[300px] max-w-[600px] h-full flex-shrink-0 flex flex-col">
+    <aside id="studio-col" class="w-96 min-w-[300px] max-w-[600px] h-full flex-shrink-0 flex flex-col transition-all duration-200">
       <div id="annotation-studio-container" class="h-full"></div>
-    </section>
+    </aside>
 
   </main>
 
-  <!-- ================= MODAL CONTAINERS ================= -->
+  <!-- ================= MODALS ================= -->
   <div id="matrix-modal-container" class="hidden"></div>
   <div id="search-modal-container" class="hidden"></div>
 
-  <!-- Firebase Settings Modal -->
-  <div id="firebase-settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-    <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in duration-150">
-      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
-        <div class="flex items-center space-x-2">
-          <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3.89 15.672L6.255.474A.77.77 0 017.65.17l3.023 5.679L3.89 15.672zm16.467 1.802l-1.996-12.63a.77.77 0 00-1.343-.377L3.636 17.474l7.632 4.316a2.316 2.316 0 002.316 0l6.773-4.316z"/></svg>
-          </div>
-          <h3 class="text-sm font-bold text-slate-100">Firebase Cloud Backend Settings</h3>
-        </div>
-        <button id="btn-close-settings" class="text-slate-400 hover:text-slate-200">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="p-4 space-y-3 text-xs">
-        <p class="text-slate-300">By default, ThesisMind works <b>100% offline</b> with IndexedDB. Paste your Firebase project configuration below to enable real-time cloud sync & Google authentication across multiple devices.</p>
-        <div>
-          <label class="block text-[10px] font-mono text-slate-400 mb-1">FIREBASE WEB CONFIG (JSON)</label>
-          <textarea id="firebase-config-input" rows="6" class="w-full p-2.5 bg-slate-950 font-mono text-xs text-amber-300 rounded-xl border border-slate-800 focus:border-amber-500 focus:outline-none" placeholder='{
-  "apiKey": "AIzaSy...",
-  "authDomain": "my-thesis.firebaseapp.com",
-  "projectId": "my-thesis-project",
-  "storageBucket": "my-thesis.appspot.com"
-}'></textarea>
-        </div>
-      </div>
-      <div class="p-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end space-x-2">
-        <button id="btn-save-firebase" class="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs transition">Save & Connect</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Toast Notifications Container -->
-  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <!-- Main Application Script (ES Module) -->
   <script type="module" src="./js/app.js"></script>

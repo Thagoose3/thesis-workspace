@@ -1,6 +1,6 @@
 /**
  * Windows-Style File Explorer & Folder Tree Component
- * Supports nested folders, breadcrumb navigation, drag & drop PDF upload, and tag filtering.
+ * Redesigned for clean, intuitive navigation, quick upload, and organized folder hierarchy.
  */
 
 import { db } from './db.js';
@@ -84,40 +84,37 @@ export class FileExplorer {
     const subfolders = this.getCurrentFolderChildren();
     const files = this.getFilteredFiles();
     const allTags = this.getAllTags();
-    const currentFolder = this.folders.find(f => f.id === this.currentFolderId);
 
     this.container.innerHTML = `
-      <div class="h-full flex flex-col bg-slate-900/90 text-slate-200 border-r border-slate-800">
-        <!-- Explorer Header Toolbar -->
-        <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+      <div class="h-full flex flex-col bg-slate-900/95 text-slate-200 border-r border-slate-800/80">
+        
+        <!-- Explorer Header -->
+        <div class="p-3 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <div class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-            </div>
-            <div>
-              <h2 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Thesis Explorer</h2>
-              <p class="text-[10px] text-slate-400 font-mono">${this.files.length} Papers · ${this.folders.length} Folders</p>
-            </div>
+            <span class="text-xs font-bold text-slate-200 tracking-wide uppercase">Thesis Explorer</span>
+            <span class="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 font-mono">${this.files.length} papers</span>
           </div>
+
           <div class="flex items-center space-x-1">
-            <button id="btn-new-folder" class="p-1.5 rounded-md hover:bg-slate-800 text-slate-300 transition" title="New Folder">
+            <button id="btn-new-folder" class="p-1.5 rounded-xl hover:bg-slate-800 text-slate-300 transition" title="New Subfolder">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
             </button>
-            <button id="btn-upload-paper" class="p-1.5 rounded-md hover:bg-slate-800 text-blue-400 transition" title="Upload PDF">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            <button id="btn-upload-paper" class="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center space-x-1 transition shadow-sm" title="Upload PDF Paper">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              <span>Upload</span>
             </button>
           </div>
         </div>
 
         <!-- Breadcrumbs Navigation -->
-        <div class="px-3 py-2 bg-slate-950/50 border-b border-slate-800/80 flex items-center space-x-1.5 text-xs overflow-x-auto whitespace-nowrap">
+        <div class="px-3 py-2 bg-slate-950/40 border-b border-slate-800/60 flex items-center space-x-1.5 text-xs overflow-x-auto whitespace-nowrap">
           <button class="btn-breadcrumb text-slate-400 hover:text-blue-400 transition font-medium flex items-center space-x-1" data-folder-id="root">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-            <span>Thesis Root</span>
+            <span>Root</span>
           </button>
           ${breadcrumbPath.map(f => `
             <span class="text-slate-600">/</span>
-            <button class="btn-breadcrumb font-medium transition ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200'}" data-folder-id="${f.id}">
+            <button class="btn-breadcrumb font-medium transition truncate max-w-[120px] ${f.id === this.currentFolderId ? 'text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200'}" data-folder-id="${f.id}" title="${f.name}">
               ${f.name}
             </button>
           `).join('')}
@@ -125,46 +122,47 @@ export class FileExplorer {
 
         <!-- Tags Filter Bar -->
         ${allTags.length > 0 ? `
-          <div class="px-3 py-2 border-b border-slate-800/50 flex items-center space-x-1.5 overflow-x-auto text-[11px]">
-            <span class="text-slate-500 font-mono text-[10px]">TAGS:</span>
+          <div class="px-3 py-1.5 border-b border-slate-800/40 flex items-center space-x-1.5 overflow-x-auto text-[11px]">
+            <span class="text-slate-500 font-mono text-[9px]">TAGS:</span>
             ${allTags.map(tag => `
-              <button class="btn-tag px-2 py-0.5 rounded-full border transition ${this.activeTag === tag ? 'bg-blue-500/20 border-blue-500 text-blue-300 font-medium' : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'}" data-tag="${tag}">
+              <button class="btn-tag px-2 py-0.5 rounded-full border transition ${this.activeTag === tag ? 'bg-blue-500/20 border-blue-500 text-blue-300 font-medium' : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-slate-200'}" data-tag="${tag}">
                 #${tag}
               </button>
             `).join('')}
           </div>
         ` : ''}
 
-        <!-- Folder Actions (Matrix & Export) -->
-        <div class="p-2 border-b border-slate-800/60 flex items-center space-x-2">
-          <button id="btn-open-matrix" class="flex-1 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium flex items-center justify-center space-x-1.5 transition shadow-sm">
-            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        <!-- Quick Folder Actions -->
+        <div class="p-2 border-b border-slate-800/60 grid grid-cols-2 gap-1.5">
+          <button id="btn-open-matrix" class="py-1 px-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium flex items-center justify-center space-x-1.5 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
             <span>Summary Matrix</span>
           </button>
-          <button id="btn-export-folder" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-medium flex items-center space-x-1.5 transition" title="Export Folder Review Notes">
-            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            <span>Export</span>
+          <button id="btn-export-folder" class="py-1 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium flex items-center justify-center space-x-1.5 transition" title="Export Folder Review Notes">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>Export Notes</span>
           </button>
         </div>
 
-        <!-- Main Explorer Content: Subfolders & Files -->
+        <!-- Main Content Area: Subfolders & Files -->
         <div class="flex-1 overflow-y-auto p-3 space-y-3" id="drop-zone">
+          
           <!-- Subfolders List -->
           ${subfolders.length > 0 && !this.activeTag ? `
             <div class="space-y-1">
               <div class="text-[10px] font-mono text-slate-500 uppercase px-1">Subfolders</div>
-              <div class="grid grid-cols-1 gap-1.5">
+              <div class="grid grid-cols-1 gap-1">
                 ${subfolders.map(f => `
-                  <div class="group flex items-center justify-between p-2 rounded-lg bg-slate-800/40 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition cursor-pointer folder-item" data-folder-id="${f.id}">
-                    <div class="flex items-center space-x-2.5 min-w-0">
+                  <div class="group flex items-center justify-between p-2 rounded-xl bg-slate-800/30 hover:bg-slate-800/70 border border-slate-800 hover:border-slate-700 transition cursor-pointer folder-item" data-folder-id="${f.id}">
+                    <div class="flex items-center space-x-2.5 min-w-0 flex-1">
                       <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"></path></svg>
-                      <span class="text-xs font-medium text-slate-200 truncate group-hover:text-blue-300">${f.name}</span>
+                      <span class="text-xs font-medium text-slate-200 truncate group-hover:text-blue-300 transition">${f.name}</span>
                     </div>
-                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition">
-                      <button class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
+                    <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
+                      <button class="p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-200 btn-rename-folder" data-folder-id="${f.id}" title="Rename">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                       </button>
-                      <button class="p-1 hover:bg-rose-900/50 rounded text-slate-400 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
+                      <button class="p-1 hover:bg-rose-900/50 rounded-lg text-slate-400 hover:text-rose-400 btn-delete-folder" data-folder-id="${f.id}" title="Delete">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                       </button>
                     </div>
@@ -174,32 +172,32 @@ export class FileExplorer {
             </div>
           ` : ''}
 
-          <!-- Files List -->
+          <!-- Papers List -->
           <div class="space-y-1.5">
             <div class="text-[10px] font-mono text-slate-500 uppercase px-1 flex justify-between items-center">
               <span>Papers (${files.length})</span>
-              ${this.activeTag ? `<span class="text-blue-400 font-normal">Filtered by #${this.activeTag}</span>` : ''}
+              ${this.activeTag ? `<span class="text-blue-400 font-normal">#${this.activeTag}</span>` : ''}
             </div>
 
             ${files.length === 0 ? `
-              <div class="p-6 text-center border-2 border-dashed border-slate-800 rounded-xl bg-slate-900/40 text-slate-500">
+              <div class="p-6 text-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-900/30 text-slate-500">
                 <svg class="w-8 h-8 mx-auto mb-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                <p class="text-xs font-medium text-slate-400">No papers in this folder</p>
-                <p class="text-[11px] text-slate-500 mt-1">Drag & drop PDF files here to upload</p>
+                <p class="text-xs font-semibold text-slate-400">Folder is empty</p>
+                <p class="text-[11px] text-slate-500 mt-1">Drag & drop PDF files here</p>
               </div>
             ` : `
               <div class="space-y-2">
                 ${files.map(file => {
                   const isSelected = file.id === this.selectedFileId;
                   return `
-                    <div class="group relative p-2.5 rounded-xl border transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/15 border-blue-500/50 shadow-md ring-1 ring-blue-500/30' : 'bg-slate-800/40 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700'}" data-file-id="${file.id}">
+                    <div class="group relative p-3 rounded-2xl border transition-all cursor-pointer file-item ${isSelected ? 'bg-blue-600/15 border-blue-500/60 shadow-md ring-1 ring-blue-500/30' : 'bg-slate-800/40 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700'}" data-file-id="${file.id}">
                       <div class="flex items-start justify-between space-x-2">
                         <div class="flex items-start space-x-2.5 min-w-0 flex-1">
-                          <div class="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <div class="w-7 h-7 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5">
                             <span class="text-[9px] font-bold">PDF</span>
                           </div>
                           <div class="min-w-0 flex-1">
-                            <h3 class="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-300">${file.name}</h3>
+                            <h3 class="text-xs font-semibold text-slate-100 truncate group-hover:text-blue-300 transition">${file.name}</h3>
                             <div class="flex items-center space-x-2 mt-1 text-[10px] text-slate-400">
                               <span>${file.pageCount || 1} Pages</span>
                               <span>•</span>
@@ -210,13 +208,13 @@ export class FileExplorer {
 
                         <!-- Action buttons -->
                         <div class="opacity-0 group-hover:opacity-100 flex items-center space-x-0.5 transition">
-                          <button class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
+                          <button class="p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                           </button>
-                          <button class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-blue-400 btn-move-file" data-file-id="${file.id}" title="Move Folder">
+                          <button class="p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-blue-400 btn-move-file" data-file-id="${file.id}" title="Move Folder">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
                           </button>
-                          <button class="p-1 hover:bg-rose-900/50 rounded text-slate-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete">
+                          <button class="p-1 hover:bg-rose-900/50 rounded-lg text-slate-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                           </button>
                         </div>
@@ -226,7 +224,7 @@ export class FileExplorer {
                       ${file.tags && file.tags.length > 0 ? `
                         <div class="flex flex-wrap gap-1 mt-2">
                           ${file.tags.map(t => `
-                            <span class="px-1.5 py-0.5 rounded bg-slate-900/80 text-[10px] text-blue-300 font-mono border border-slate-700/50">#${t}</span>
+                            <span class="px-2 py-0.5 rounded-full bg-slate-900 text-[10px] text-blue-300 font-mono border border-slate-700/60">#${t}</span>
                           `).join('')}
                         </div>
                       ` : ''}
@@ -409,7 +407,6 @@ export class FileExplorer {
         console.warn('Could not read page count:', err);
       }
 
-      // Auto tag based on filename
       const defaultTags = [];
       const cleanName = file.name.replace(/\.pdf$/i, '');
       if (/cloud/i.test(cleanName)) defaultTags.push('CloudSecurity');
@@ -428,7 +425,6 @@ export class FileExplorer {
 
       await db.saveFile(paperFile);
 
-      // Create initial metadata entry
       const meta = createPaperMetadata({
         fileId: paperFile.id,
         title: cleanName.replace(/_/g, ' '),

@@ -1,9 +1,9 @@
 /**
  * Sample Academic Data & Minimal Multi-page PDF Generator
- * Initializes realistic Thesis folder hierarchy and sample research papers.
+ * Initializes realistic Thesis folder hierarchy and sample research papers with rich annotations.
  */
 
-import { generateId, createFolder, createPaperFile, createHighlight, createSideNote, createPaperMetadata } from './models.js';
+import { createFolder, createPaperFile, createHighlight, createSideNote, createPaperMetadata } from './models.js';
 
 // Creates a valid PDF binary ArrayBuffer with standard fonts and text streams
 function createAcademicPDF(title, authors, abstract, pagesContent = []) {
@@ -37,7 +37,6 @@ function createAcademicPDF(title, authors, abstract, pagesContent = []) {
     }
   ];
 
-  // Helper to escape PDF strings
   const esc = (str) => str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 
   const objects = [];
@@ -57,18 +56,15 @@ function createAcademicPDF(title, authors, abstract, pagesContent = []) {
     const pageData = pages[i];
     let streamText = 'BT\n';
     
-    // Page Header / Title
     streamText += `/F2 16 Tf\n50 740 Td\n(${esc(pageData.title)}) Tj\n`;
     streamText += `/F1 10 Tf\n0 -20 Td\n(${esc(pageData.subtitle)}) Tj\n`;
     streamText += `0 -10 Td\n(Page ${i + 1} of ${pages.length}) Tj\n`;
 
     let curY = -35;
     for (const sec of pageData.sections) {
-      // Section Heading
       streamText += `/F2 12 Tf\n0 ${curY} Td\n(${esc(sec.heading)}) Tj\n`;
       streamText += `/F1 10 Tf\n0 -18 Td\n`;
 
-      // Word wrapping simulation
       const words = sec.text.split(' ');
       let line = '';
       for (const w of words) {
@@ -92,12 +88,10 @@ function createAcademicPDF(title, authors, abstract, pagesContent = []) {
     pageObjIds.push(pageObj);
   }
 
-  // Catalog and Pages
   const pagesListStr = pageObjIds.map(id => `${id} 0 R`).join(' ');
   const pagesRootObj = newObj(`<< /Type /Pages /Kids [${pagesListStr}] /Count ${pageObjIds.length} >>`);
   const catalogObj = newObj(`<< /Type /Catalog /Pages ${pagesRootObj} 0 R >>`);
 
-  // Assemble PDF document
   let pdf = '%PDF-1.4\n';
   const xrefOffsets = [0];
 
@@ -116,7 +110,6 @@ function createAcademicPDF(title, authors, abstract, pagesContent = []) {
 
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogObj} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
-  // Convert to ArrayBuffer
   const buffer = new ArrayBuffer(pdf.length);
   const view = new Uint8Array(buffer);
   for (let i = 0; i < pdf.length; i++) {
@@ -128,10 +121,10 @@ function createAcademicPDF(title, authors, abstract, pagesContent = []) {
 export async function populateSampleData(db) {
   const existingFolders = await db.getFolders();
   if (existingFolders && existingFolders.length > 0) {
-    return; // Already initialized
+    return;
   }
 
-  console.log('Initializing Thesis sample research papers and folder structure...');
+  console.log('Initializing Thesis sample research papers and folder hierarchy...');
 
   // 1. Create Folder Tree
   const fChapter1 = createFolder({ name: 'Chapter 1 - Introduction & Problem Scope', parentId: null });
@@ -153,7 +146,6 @@ export async function populateSampleData(db) {
   await db.saveFolder(fSubtopic2);
   await db.saveFolder(fSubtopic3);
 
-  // 2. Generate Papers
   // Paper 1: RansomShield
   const p1Buffer = createAcademicPDF(
     'RansomShield: Deep Behavioral Detection for Cloud Ransomware',
@@ -194,7 +186,10 @@ export async function populateSampleData(db) {
     fileId: file1.id,
     pageNumber: 1,
     text: 'sub-second threat categorization with less than 0.05% false positive rate',
-    color: 'yellow'
+    color: 'yellow',
+    rects: [
+      { left: 0.08, top: 0.44, width: 0.84, height: 0.024 }
+    ]
   });
   await db.saveHighlight(hl1);
 
@@ -253,22 +248,6 @@ export async function populateSampleData(db) {
     findings: 'Reduced credential compromise lateral blast radius by 88% across enterprise trials.'
   });
   await db.saveMetadata(meta2);
-
-  const hl2 = createHighlight({
-    fileId: file2.id,
-    pageNumber: 1,
-    text: 'Continuous contextual authentication engine based on Bayesian risk scoring',
-    color: 'green'
-  });
-  await db.saveHighlight(hl2);
-
-  const note2 = createSideNote({
-    fileId: file2.id,
-    highlightId: hl2.id,
-    pageNumber: 1,
-    content: 'Good reference for dynamic trust scoring algorithms.'
-  });
-  await db.saveSideNote(note2);
 
   // Paper 3: Transformer Log Anomaly
   const p3Buffer = createAcademicPDF(

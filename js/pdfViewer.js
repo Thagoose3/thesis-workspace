@@ -1,6 +1,7 @@
 /**
  * PDF Viewer & Interactive Annotation Engine for ThesisMind
- * Powered by PDF.js with real Canvas rendering, Text Selection Layer, and Multi-color Highlights.
+ * Powered by PDF.js with real Canvas rendering, Text Selection Layer, Multi-color Highlights,
+ * and Contextual Highlight Management Popover (Undo/Remove, Change Color, Note, TTS).
  */
 
 import { HighlightColors, PaperThemes, createHighlight, createSideNote } from './models.js';
@@ -17,29 +18,34 @@ export class PDFViewerEngine {
     this.theme = PaperThemes.LIGHT;
     this.currentPage = 1;
     this.totalPages = 0;
-    this.pageRendering = false;
     this.highlights = [];
-    this.floatingToolbar = null;
+    this.selectionToolbar = null;
+    this.highlightPopover = null;
     this.activeSelection = null;
+    this.activeHighlight = null;
+    
     this.onHighlightCreated = options.onHighlightCreated || (() => {});
+    this.onHighlightDeleted = options.onHighlightDeleted || (() => {});
+    this.onHighlightUpdated = options.onHighlightUpdated || (() => {});
     this.onHighlightClicked = options.onHighlightClicked || (() => {});
     this.onPageChanged = options.onPageChanged || (() => {});
     
-    this._initFloatingToolbar();
+    this._initSelectionToolbar();
+    this._initHighlightPopover();
     this._initScrollObserver();
   }
 
-  _initFloatingToolbar() {
-    this.floatingToolbar = document.createElement('div');
-    this.floatingToolbar.className = 'floating-toolbar fixed z-50 hidden glass-dropdown rounded-xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-slate-700/60 text-xs';
+  _initSelectionToolbar() {
+    this.selectionToolbar = document.createElement('div');
+    this.selectionToolbar.className = 'floating-toolbar fixed z-50 hidden glass-dropdown rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 border border-slate-700/70 text-xs';
     
     // Highlight colors
     const colorsContainer = document.createElement('div');
-    colorsContainer.className = 'flex items-center space-x-1 pr-1.5 border-r border-slate-700';
+    colorsContainer.className = 'flex items-center space-x-1 pr-1.5 border-r border-slate-700/70';
 
     Object.values(HighlightColors).forEach(col => {
       const btn = document.createElement('button');
-      btn.className = 'w-6 h-6 rounded-full border border-white/20 transition-transform hover:scale-110 active:scale-95 shadow-sm';
+      btn.className = 'w-6 h-6 rounded-full border border-white/20 transition-all hover:scale-125 active:scale-95 shadow-sm hover:shadow-md';
       btn.style.backgroundColor = col.hex;
       btn.title = `Highlight ${col.name}`;
       btn.addEventListener('mousedown', (e) => {
@@ -51,7 +57,7 @@ export class PDFViewerEngine {
 
     // Add Note button
     const noteBtn = document.createElement('button');
-    noteBtn.className = 'px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center space-x-1 transition';
+    noteBtn.className = 'px-2.5 py-1 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center space-x-1.5 transition hover:scale-105 active:scale-95';
     noteBtn.innerHTML = `
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
       <span>Note</span>
@@ -61,9 +67,9 @@ export class PDFViewerEngine {
       this._applyHighlightAndNote();
     });
 
-    // TTS Speak button
+    // TTS Read button
     const ttsBtn = document.createElement('button');
-    ttsBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium flex items-center space-x-1 transition';
+    ttsBtn.className = 'px-2.5 py-1 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium flex items-center space-x-1.5 transition hover:scale-105 active:scale-95';
     ttsBtn.innerHTML = `
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
       <span>Read</span>
@@ -72,44 +78,142 @@ export class PDFViewerEngine {
       e.preventDefault();
       if (this.activeSelection && this.activeSelection.text) {
         tts.speak(this.activeSelection.text);
-        this.hideToolbar();
+        this.hideSelectionToolbar();
       }
     });
 
-    // Copy text button
+    // Copy button
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition';
+    copyBtn.className = 'p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition hover:scale-105 active:scale-95';
     copyBtn.title = 'Copy Text';
     copyBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
     copyBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       if (this.activeSelection && this.activeSelection.text) {
         navigator.clipboard.writeText(this.activeSelection.text);
-        this.hideToolbar();
+        this.hideSelectionToolbar();
       }
     });
 
-    this.floatingToolbar.appendChild(colorsContainer);
-    this.floatingToolbar.appendChild(noteBtn);
-    this.floatingToolbar.appendChild(ttsBtn);
-    this.floatingToolbar.appendChild(copyBtn);
-    document.body.appendChild(this.floatingToolbar);
+    this.selectionToolbar.appendChild(colorsContainer);
+    this.selectionToolbar.appendChild(noteBtn);
+    this.selectionToolbar.appendChild(ttsBtn);
+    this.selectionToolbar.appendChild(copyBtn);
+    document.body.appendChild(this.selectionToolbar);
 
-    // Global listener for text selection
+    // Text selection listener
     document.addEventListener('selectionchange', () => {
       this._handleSelectionChange();
     });
 
-    // Dismiss toolbar on clicks outside
+    // Dismiss popups on click outside
     document.addEventListener('mousedown', (e) => {
-      if (this.floatingToolbar && !this.floatingToolbar.contains(e.target)) {
+      if (this.selectionToolbar && !this.selectionToolbar.contains(e.target)) {
         if (!window.getSelection()?.isCollapsed) {
-          // keep toolbar if still selecting within reader
+          // keep
         } else {
-          this.hideToolbar();
+          this.hideSelectionToolbar();
         }
       }
+      if (this.highlightPopover && !this.highlightPopover.contains(e.target) && !e.target.closest('.pdf-highlight')) {
+        this.hideHighlightPopover();
+      }
     });
+  }
+
+  _initHighlightPopover() {
+    // Popover shown when user clicks on an existing highlight to edit/remove it
+    this.highlightPopover = document.createElement('div');
+    this.highlightPopover.className = 'highlight-popover fixed z-50 hidden glass-dropdown rounded-2xl shadow-2xl p-2 flex items-center space-x-2 border border-slate-700/80 text-xs animate-in fade-in zoom-in-95 duration-100';
+    document.body.appendChild(this.highlightPopover);
+  }
+
+  showHighlightPopover(hl, targetElement) {
+    this.activeHighlight = hl;
+    const rect = targetElement.getBoundingClientRect();
+
+    this.highlightPopover.innerHTML = `
+      <div class="flex items-center space-x-1.5 pr-2 border-r border-slate-700/70">
+        ${Object.values(HighlightColors).map(col => `
+          <button class="btn-change-color w-5 h-5 rounded-full border ${hl.color === col.id ? 'ring-2 ring-white scale-110' : 'border-white/20'} transition hover:scale-125" style="background-color: ${col.hex}" data-color="${col.id}" title="Change to ${col.name}"></button>
+        `).join('')}
+      </div>
+      <button id="btn-pop-note" class="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-medium flex items-center space-x-1 transition" title="Add or Edit Note">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+        <span>Note</span>
+      </button>
+      <button id="btn-pop-tts" class="px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 font-medium flex items-center space-x-1 transition" title="Read Aloud">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+        <span>Read</span>
+      </button>
+      <button id="btn-pop-delete" class="px-2.5 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white font-medium flex items-center space-x-1 transition" title="Remove Highlight">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        <span>Remove</span>
+      </button>
+    `;
+
+    // Position popover right above the clicked highlight
+    this.highlightPopover.style.left = `${Math.max(10, rect.left + rect.width / 2)}px`;
+    this.highlightPopover.style.top = `${Math.max(10, rect.top - 46)}px`;
+    this.highlightPopover.style.transform = 'translateX(-50%)';
+    this.highlightPopover.classList.remove('hidden');
+
+    // Bind Popover events
+    this.highlightPopover.querySelectorAll('.btn-change-color').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const newColor = btn.getAttribute('data-color');
+        await this.updateHighlightColor(hl.id, newColor);
+        this.hideHighlightPopover();
+      });
+    });
+
+    this.highlightPopover.querySelector('#btn-pop-note')?.addEventListener('click', () => {
+      this.onHighlightClicked(hl);
+      this.hideHighlightPopover();
+    });
+
+    this.highlightPopover.querySelector('#btn-pop-tts')?.addEventListener('click', () => {
+      tts.speak(hl.text);
+      this.hideHighlightPopover();
+    });
+
+    this.highlightPopover.querySelector('#btn-pop-delete')?.addEventListener('click', async () => {
+      await this.deleteHighlight(hl.id);
+      this.hideHighlightPopover();
+    });
+  }
+
+  hideHighlightPopover() {
+    if (this.highlightPopover) {
+      this.highlightPopover.classList.add('hidden');
+    }
+  }
+
+  async deleteHighlight(hlId) {
+    await db.deleteHighlight(hlId);
+    this.highlights = this.highlights.filter(h => h.id !== hlId);
+    
+    // Remove DOM elements immediately
+    const els = document.querySelectorAll(`.highlight-id-${hlId}`);
+    els.forEach(el => el.remove());
+
+    this.onHighlightDeleted(hlId);
+  }
+
+  async updateHighlightColor(hlId, newColor) {
+    const hl = this.highlights.find(h => h.id === hlId);
+    if (!hl) return;
+    hl.color = newColor;
+    await db.saveHighlight(hl);
+
+    // Update DOM colors immediately
+    const colorObj = HighlightColors[newColor.toUpperCase()] || HighlightColors.YELLOW;
+    const els = document.querySelectorAll(`.highlight-id-${hlId}`);
+    els.forEach(el => {
+      el.className = `pdf-highlight ${colorObj.class} highlight-id-${hl.id}`;
+    });
+
+    this.onHighlightUpdated(hl);
   }
 
   _initScrollObserver() {
@@ -148,7 +252,7 @@ export class PDFViewerEngine {
       : commonAncestor.parentElement?.closest('.pdf-page-container');
 
     if (!pageEl || !this.container.contains(pageEl)) {
-      this.hideToolbar();
+      this.hideSelectionToolbar();
       return;
     }
 
@@ -163,15 +267,16 @@ export class PDFViewerEngine {
       rect: rect
     };
 
-    // Position floating toolbar above selection
-    this.floatingToolbar.style.left = `${rect.left + rect.width / 2}px`;
-    this.floatingToolbar.style.top = `${Math.max(10, rect.top - 48)}px`;
-    this.floatingToolbar.classList.remove('hidden');
+    // Position floating selection toolbar
+    this.selectionToolbar.style.left = `${rect.left + rect.width / 2}px`;
+    this.selectionToolbar.style.top = `${Math.max(10, rect.top - 48)}px`;
+    this.selectionToolbar.style.transform = 'translateX(-50%)';
+    this.selectionToolbar.classList.remove('hidden');
   }
 
-  hideToolbar() {
-    if (this.floatingToolbar) {
-      this.floatingToolbar.classList.add('hidden');
+  hideSelectionToolbar() {
+    if (this.selectionToolbar) {
+      this.selectionToolbar.classList.add('hidden');
     }
   }
 
@@ -182,7 +287,6 @@ export class PDFViewerEngine {
     const pageRect = pageEl.getBoundingClientRect();
     const clientRects = Array.from(range.getClientRects());
     
-    // Normalize coordinates relative to page container
     const normalizedRects = clientRects.map(r => ({
       left: (r.left - pageRect.left) / pageRect.width,
       top: (r.top - pageRect.top) / pageRect.height,
@@ -203,7 +307,7 @@ export class PDFViewerEngine {
     this._renderHighlightOnPage(pageEl, hl);
 
     window.getSelection()?.removeAllRanges();
-    this.hideToolbar();
+    this.hideSelectionToolbar();
     this.onHighlightCreated(hl);
   }
 
@@ -233,7 +337,6 @@ export class PDFViewerEngine {
     this.highlights.push(hl);
     this._renderHighlightOnPage(pageEl, hl);
 
-    // Create initial note
     const note = createSideNote({
       fileId: this.currentFile.id,
       highlightId: hl.id,
@@ -243,7 +346,7 @@ export class PDFViewerEngine {
     await db.saveSideNote(note);
 
     window.getSelection()?.removeAllRanges();
-    this.hideToolbar();
+    this.hideSelectionToolbar();
     this.onHighlightCreated(hl, note);
   }
 
@@ -307,9 +410,9 @@ export class PDFViewerEngine {
     const widthPx = Math.floor(viewport.width);
     const heightPx = Math.floor(viewport.height);
 
-    // Page Container with explicit fixed width, height, and flex-shrink-0 to prevent vertical squishing
+    // Page Container with explicit fixed width, height, and flex-shrink-0
     const pageContainer = document.createElement('div');
-    pageContainer.className = `pdf-page-container relative mx-auto my-6 shadow-2xl rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 pdf-theme-${this.theme}`;
+    pageContainer.className = `pdf-page-container relative mx-auto my-6 shadow-2xl rounded-2xl overflow-hidden flex-shrink-0 transition-all duration-200 pdf-theme-${this.theme}`;
     pageContainer.id = `page-${pageNum}`;
     pageContainer.setAttribute('data-page-number', pageNum);
     pageContainer.style.width = `${widthPx}px`;
@@ -317,7 +420,7 @@ export class PDFViewerEngine {
     pageContainer.style.minWidth = `${widthPx}px`;
     pageContainer.style.minHeight = `${heightPx}px`;
 
-    // Canvas layer with Hi-DPI support
+    // Canvas layer with Hi-DPI
     const canvas = document.createElement('canvas');
     canvas.className = 'block absolute top-0 left-0 z-[1]';
     canvas.width = Math.floor(viewport.width * outputScale);
@@ -382,11 +485,14 @@ export class PDFViewerEngine {
         el.style.top = `${rect.top * 100}%`;
         el.style.width = `${rect.width * 100}%`;
         el.style.height = `${rect.height * 100}%`;
-        el.title = hl.text;
+        el.title = `"${hl.text}" — Click to edit or remove`;
+        
+        // Click to show contextual highlight popover
         el.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.onHighlightClicked(hl);
+          this.showHighlightPopover(hl, el);
         });
+
         highlightLayer.appendChild(el);
       });
     }

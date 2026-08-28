@@ -1,5 +1,6 @@
 /**
  * ThesisMind - Core Application Orchestrator
+ * Connects PDF Viewer, File Explorer, Annotation Studio, Search, Matrix, and TTS.
  */
 
 import { db } from './db.js';
@@ -11,7 +12,6 @@ import { SummaryMatrixModal } from './matrix.js';
 import { GlobalSearchModal } from './search.js';
 import { exportFolderSummary } from './export.js';
 import { tts } from './tts.js';
-import { firebaseSync } from './firebaseSync.js';
 
 class ThesisMindApp {
   constructor() {
@@ -22,24 +22,25 @@ class ThesisMindApp {
     this.searchModal = null;
     this.currentFile = null;
     this.currentTheme = 'light';
+    this.leftPanelVisible = true;
+    this.rightPanelVisible = true;
   }
 
   async init() {
-    // 1. Initialize IndexedDB & Preload Sample Data if first run
+    // 1. Initialize IndexedDB & Preload Sample Data
     await db.ready();
     await populateSampleData(db);
-    await firebaseSync.init();
 
     // 2. Initialize UI Components
-    this._initExplorer();
     this._initViewer();
     this._initStudio();
+    this._initExplorer();
     this._initModals();
     this._initHeaderEvents();
     this._initTTSPlayer();
     this._initSplitResizers();
 
-    // 3. Load first file from sample dataset
+    // 3. Load first paper
     const files = await db.getAll('files');
     if (files.length > 0) {
       await this.openFile(files[0]);
@@ -63,17 +64,29 @@ class ThesisMindApp {
   _initViewer() {
     const container = document.getElementById('pdf-canvas-container');
     this.viewer = new PDFViewerEngine(container, {
-      onHighlightCreated: async (hl, note) => {
-        await this.studio.loadFile(this.currentFile);
+      onHighlightCreated: async (hl) => {
+        if (this.studio) await this.studio.loadFile(this.currentFile);
         this.showToast('Highlight saved!');
       },
+      onHighlightDeleted: async (hlId) => {
+        if (this.studio) await this.studio.loadFile(this.currentFile);
+        this.showToast('Highlight removed!');
+      },
+      onHighlightUpdated: async (hl) => {
+        if (this.studio) await this.studio.loadFile(this.currentFile);
+      },
       onHighlightClicked: (hl) => {
-        this.studio.loadFile(this.currentFile);
+        if (this.studio) {
+          this.studio.activeTab = 'annotations';
+          this.studio.loadFile(this.currentFile);
+        }
         this.viewer.flashHighlight(hl.id);
       },
       onPageChanged: (cur, total) => {
-        document.getElementById('page-indicator').textContent = `${cur} / ${total}`;
-        document.getElementById('page-input').value = cur;
+        const ind = document.getElementById('page-indicator');
+        const inp = document.getElementById('page-input');
+        if (ind) ind.textContent = `/ ${total}`;
+        if (inp) inp.value = cur;
       }
     });
   }
@@ -83,6 +96,12 @@ class ThesisMindApp {
     this.studio = new AnnotationStudio(container, {
       onJumpToPage: (pageNum) => this.viewer.scrollToPage(pageNum),
       onFlashHighlight: (hlId) => this.viewer.flashHighlight(hlId),
+      onDeleteHighlight: async (hlId) => {
+        await this.viewer.deleteHighlight(hlId);
+      },
+      onUpdateHighlightColor: async (hlId, color) => {
+        await this.viewer.updateHighlightColor(hlId, color);
+      },
       onShowToast: (msg) => this.showToast(msg)
     });
   }
@@ -109,11 +128,13 @@ class ThesisMindApp {
 
   async openFile(file) {
     this.currentFile = file;
-    this.explorer.selectedFileId = file.id;
-    this.explorer.render();
+    if (this.explorer) {
+      this.explorer.selectedFileId = file.id;
+      this.explorer.render();
+    }
 
-    document.getElementById('current-file-title').textContent = file.name;
-    document.getElementById('pdf-toolbar').classList.remove('opacity-40', 'pointer-events-none');
+    const titleEl = document.getElementById('current-file-title');
+    if (titleEl) titleEl.textContent = file.name;
 
     await this.viewer.loadPDF(file);
     await this.studio.loadFile(file);
@@ -125,13 +146,37 @@ class ThesisMindApp {
       this.searchModal.open();
     });
 
-    // Theme filter buttons (Normal, Sepia, Dark)
+    // Summary matrix button in header
+    document.getElementById('btn-header-matrix')?.addEventListener('click', () => {
+      const currentFolderId = this.explorer ? this.explorer.currentFolderId : null;
+      this.matrixModal.open(currentFolderId);
+    });
+
+    // Sidebar Toggles
+    const leftCol = document.getElementById('explorer-col');
+    const rightCol = document.getElementById('studio-col');
+    const leftResizer = document.getElementById('resizer-left');
+    const rightResizer = document.getElementById('resizer-right');
+
+    document.getElementById('btn-toggle-left-panel')?.addEventListener('click', () => {
+      this.leftPanelVisible = !this.leftPanelVisible;
+      if (leftCol) leftCol.style.display = this.leftPanelVisible ? 'flex' : 'none';
+      if (leftResizer) leftResizer.style.display = this.leftPanelVisible ? 'block' : 'none';
+    });
+
+    document.getElementById('btn-toggle-right-panel')?.addEventListener('click', () => {
+      this.rightPanelVisible = !this.rightPanelVisible;
+      if (rightCol) rightCol.style.display = this.rightPanelVisible ? 'flex' : 'none';
+      if (rightResizer) rightResizer.style.display = this.rightPanelVisible ? 'block' : 'none';
+    });
+
+    // Theme filters (Light, Sepia, Dark)
     const btnThemeNormal = document.getElementById('btn-theme-normal');
     const btnThemeSepia = document.getElementById('btn-theme-sepia');
     const btnThemeDark = document.getElementById('btn-theme-dark');
 
     const updateThemeButtons = (theme) => {
-      [btnThemeNormal, btnThemeSepia, btnThemeDark].forEach(b => b?.classList.remove('bg-blue-600', 'text-white', 'border-blue-400'));
+      [btnThemeNormal, btnThemeSepia, btnThemeDark].forEach(b => b?.classList.remove('bg-blue-600', 'text-white'));
       if (theme === 'light') btnThemeNormal?.classList.add('bg-blue-600', 'text-white');
       if (theme === 'sepia') btnThemeSepia?.classList.add('bg-amber-600', 'text-white');
       if (theme === 'dark') btnThemeDark?.classList.add('bg-slate-700', 'text-white');
@@ -160,7 +205,7 @@ class ThesisMindApp {
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => this.viewer.zoomOut());
     document.getElementById('btn-zoom-fit')?.addEventListener('click', () => this.viewer.fitWidth());
 
-    // Page navigation buttons
+    // Page navigation
     document.getElementById('btn-page-prev')?.addEventListener('click', () => {
       if (this.viewer.currentPage > 1) {
         this.viewer.scrollToPage(this.viewer.currentPage - 1);
@@ -178,26 +223,6 @@ class ThesisMindApp {
       const p = parseInt(pageInput.value, 10);
       if (p >= 1 && p <= this.viewer.totalPages) {
         this.viewer.scrollToPage(p);
-      }
-    });
-
-    // Firebase Settings modal
-    const settingsBtn = document.getElementById('btn-open-settings');
-    const settingsModal = document.getElementById('firebase-settings-modal');
-    const closeSettingsBtn = document.getElementById('btn-close-settings');
-    const saveFirebaseBtn = document.getElementById('btn-save-firebase');
-
-    settingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
-    closeSettingsBtn?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
-
-    saveFirebaseBtn?.addEventListener('click', async () => {
-      const configJson = document.getElementById('firebase-config-input')?.value;
-      try {
-        await firebaseSync.saveConfig(configJson);
-        this.showToast('Firebase configuration saved successfully!');
-        settingsModal?.classList.add('hidden');
-      } catch (err) {
-        alert(err.message);
       }
     });
   }
@@ -227,23 +252,21 @@ class ThesisMindApp {
   }
 
   _initSplitResizers() {
-    // Left Sidebar Resizer
     const leftResizer = document.getElementById('resizer-left');
     const explorerCol = document.getElementById('explorer-col');
     let isResizingLeft = false;
 
-    leftResizer?.addEventListener('mousedown', (e) => {
+    leftResizer?.addEventListener('mousedown', () => {
       isResizingLeft = true;
       leftResizer.classList.add('resizing');
       document.body.style.cursor = 'col-resize';
     });
 
-    // Right Sidebar Resizer
     const rightResizer = document.getElementById('resizer-right');
     const studioCol = document.getElementById('studio-col');
     let isResizingRight = false;
 
-    rightResizer?.addEventListener('mousedown', (e) => {
+    rightResizer?.addEventListener('mousedown', () => {
       isResizingRight = true;
       rightResizer.classList.add('resizing');
       document.body.style.cursor = 'col-resize';
@@ -255,7 +278,7 @@ class ThesisMindApp {
         explorerCol.style.width = `${newWidth}px`;
       }
       if (isResizingRight && studioCol) {
-        const newWidth = Math.max(300, Math.min(600, window.innerWidth - e.clientX));
+        const newWidth = Math.max(280, Math.min(600, window.innerWidth - e.clientX));
         studioCol.style.width = `${newWidth}px`;
       }
     });
@@ -279,7 +302,7 @@ class ThesisMindApp {
     if (!toastContainer) return;
 
     const toast = document.createElement('div');
-    toast.className = 'toast-animate flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-900/95 border border-slate-700 text-slate-100 text-xs font-medium shadow-2xl backdrop-blur-md';
+    toast.className = 'toast-animate flex items-center space-x-2.5 px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 text-xs font-medium shadow-2xl backdrop-blur-xl';
     toast.innerHTML = `
       <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
       <span>${message}</span>
@@ -291,11 +314,11 @@ class ThesisMindApp {
       toast.style.transform = 'translateY(10px)';
       toast.style.transition = 'all 0.3s ease';
       setTimeout(() => toast.remove(), 300);
-    }, 2800);
+    }, 2500);
   }
 }
 
-// Start application when DOM is ready
+// Start application
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new ThesisMindApp();
   window.app.init();
