@@ -3,10 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ThesisMind</title>
+  <title>ThesisMind - Distraction-Free Research Studio</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PDF.js Official Viewer Stylesheet for Pixel-Perfect Text Layer Selection -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css" />
+
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -181,8 +185,8 @@
         </div>
       </div>
 
-      <!-- PDF Canvas Viewport Container -->
-      <div id="pdf-canvas-container" class="flex-1 overflow-auto p-8 flex flex-col items-center bg-zinc-950 select-text">
+      <!-- PDF Canvas Viewport Container (select-none ensures page margins never get mistakenly dragged) -->
+      <div id="pdf-canvas-container" class="flex-1 overflow-auto p-8 flex flex-col items-center bg-zinc-950 select-none">
         <div class="flex flex-col items-center justify-center h-full text-zinc-600 space-y-2">
           <p class="text-xs text-zinc-500 font-medium">Select a thesis paper from the left panel to begin reading</p>
         </div>

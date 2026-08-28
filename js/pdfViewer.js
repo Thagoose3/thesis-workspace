@@ -338,6 +338,7 @@ export class PDFViewerEngine {
     const textContent = await page.getTextContent();
     const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
     if (pdfjsLib.renderTextLayer) {
+      textLayerDiv.style.setProperty('--scale-factor', `${viewport.scale}`);
       await pdfjsLib.renderTextLayer({
         textContentSource: textContent,
         container: textLayerDiv,
@@ -856,6 +857,7 @@ export class PDFViewerEngine {
     const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
     
     if (pdfjsLib.renderTextLayer) {
+      textLayerDiv.style.setProperty('--scale-factor', `${viewport.scale}`);
       await pdfjsLib.renderTextLayer({
         textContentSource: textContent,
         container: textLayerDiv,

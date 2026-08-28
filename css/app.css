@@ -50,7 +50,17 @@ body {
   border-radius: 8px;
 }
 
-/* PDF Page Container Aspect Ratio & Shadows */
+/* PDF Viewport & Containers - Strictly non-selectable so page margins never get dragged */
+#pdf-canvas-container,
+.pdf-page-container,
+.pdf-page-container canvas,
+.highlight-layer,
+.markup-layer,
+.drawing-canvas {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .pdf-page-container {
   flex-shrink: 0 !important;
   box-sizing: content-box !important;
@@ -75,7 +85,7 @@ body {
   background-color: #18181b !important;
 }
 
-/* Precision PDF.js Text Layer Specification (Crystal-clear alignment & selection) */
+/* Precision PDF.js Text Layer (Matches canvas font metrics 100%) */
 .textLayer {
   position: absolute;
   text-align: initial;
@@ -84,29 +94,31 @@ body {
   right: 0;
   bottom: 0;
   overflow: hidden;
-  opacity: 1;
-  line-height: 1.0;
+  opacity: 1 !important;
+  line-height: 1.0 !important;
   text-size-adjust: none;
   forced-color-adjust: none;
   transform-origin: 0 0;
-  z-index: 4;
-  user-select: text;
-  -webkit-user-select: text;
+  z-index: 5 !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .textLayer span,
 .textLayer span br {
-  color: transparent;
+  color: transparent !important;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
-  margin: 0;
-  padding: 0;
+  margin: 0 !important;
+  padding: 0 !important;
   box-sizing: border-box;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
-/* Selection Highlight in TextLayer */
+/* Custom Blue Selection Tint for Active Text Selection */
 .textLayer ::selection {
   background: rgba(59, 130, 246, 0.35) !important;
   color: transparent !important;
