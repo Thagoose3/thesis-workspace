@@ -1,10 +1,14 @@
 /**
  * IndexedDB Database Service for ThesisMind
  * High-performance, offline-first client storage for papers, annotations, markups, and metadata.
+ * Features:
+ * - Direct hook into CloudSyncManager for automatic Firestore synchronization
  */
 
+import { syncManager } from './sync.js';
+
 const DB_NAME = 'ThesisMindDB';
-const DB_VERSION = 2; // Incremented for markups store
+const DB_VERSION = 2;
 
 class DatabaseService {
   constructor() {
@@ -148,8 +152,10 @@ class DatabaseService {
   }
 
   async saveFolder(folder) {
-    folder.updatedAt = new Date().toISOString();
-    return this.put('folders', folder);
+    folder.updatedAt = folder.updatedAt || new Date().toISOString();
+    const res = await this.put('folders', folder);
+    syncManager.pushItem('folder', folder);
+    return res;
   }
 
   async deleteFolderRecursive(folderId) {
@@ -175,10 +181,11 @@ class DatabaseService {
 
     for (const fid of childFolderIds) {
       await this.delete('folders', fid);
+      syncManager.deleteItem('folder', fid);
     }
   }
 
-  // Files
+  // Files / Papers
   async getFiles(folderId = null) {
     if (folderId === null) {
       return this.getAll('files');
@@ -186,9 +193,19 @@ class DatabaseService {
     return this.getByIndex('files', 'folderId', folderId);
   }
 
+  async getPapers() {
+    return this.getAll('files');
+  }
+
   async saveFile(file) {
-    file.updatedAt = new Date().toISOString();
-    return this.put('files', file);
+    file.updatedAt = file.updatedAt || new Date().toISOString();
+    const res = await this.put('files', file);
+    syncManager.pushItem('paper', file);
+    return res;
+  }
+
+  async savePaper(paper) {
+    return this.saveFile(paper);
   }
 
   async deleteFileComplete(fileId) {
@@ -196,19 +213,24 @@ class DatabaseService {
     await this.delete('scratchpads', fileId);
     await this.delete('metadata', fileId);
 
+    syncManager.deleteItem('paper', fileId);
+
     const highlights = await this.getByIndex('highlights', 'fileId', fileId);
     for (const hl of highlights) {
       await this.delete('highlights', hl.id);
+      syncManager.deleteItem('highlight', hl.id);
     }
 
     const notes = await this.getByIndex('sideNotes', 'fileId', fileId);
     for (const note of notes) {
       await this.delete('sideNotes', note.id);
+      syncManager.deleteItem('note', note.id);
     }
 
     const markups = await this.getByIndex('markups', 'fileId', fileId);
     for (const mk of markups) {
       await this.delete('markups', mk.id);
+      syncManager.deleteItem('markup', mk.id);
     }
   }
 
@@ -217,16 +239,26 @@ class DatabaseService {
     return this.getByIndex('highlights', 'fileId', fileId);
   }
 
+  async getAllHighlights() {
+    return this.getAll('highlights');
+  }
+
   async saveHighlight(hl) {
-    return this.put('highlights', hl);
+    hl.updatedAt = hl.updatedAt || new Date().toISOString();
+    const res = await this.put('highlights', hl);
+    syncManager.pushItem('highlight', hl);
+    return res;
   }
 
   async deleteHighlight(hlId) {
     const notes = await this.getByIndex('sideNotes', 'highlightId', hlId);
     for (const n of notes) {
       await this.delete('sideNotes', n.id);
+      syncManager.deleteItem('note', n.id);
     }
-    return this.delete('highlights', hlId);
+    const res = await this.delete('highlights', hlId);
+    syncManager.deleteItem('highlight', hlId);
+    return res;
   }
 
   // Side Notes
@@ -234,13 +266,21 @@ class DatabaseService {
     return this.getByIndex('sideNotes', 'fileId', fileId);
   }
 
+  async getAllSideNotes() {
+    return this.getAll('sideNotes');
+  }
+
   async saveSideNote(note) {
-    note.updatedAt = new Date().toISOString();
-    return this.put('sideNotes', note);
+    note.updatedAt = note.updatedAt || new Date().toISOString();
+    const res = await this.put('sideNotes', note);
+    syncManager.pushItem('note', note);
+    return res;
   }
 
   async deleteSideNote(noteId) {
-    return this.delete('sideNotes', noteId);
+    const res = await this.delete('sideNotes', noteId);
+    syncManager.deleteItem('note', noteId);
+    return res;
   }
 
   // Markups (Text boxes, Images, Drawings, Shapes)
@@ -248,13 +288,21 @@ class DatabaseService {
     return this.getByIndex('markups', 'fileId', fileId);
   }
 
+  async getAllMarkups() {
+    return this.getAll('markups');
+  }
+
   async saveMarkup(markup) {
-    markup.updatedAt = new Date().toISOString();
-    return this.put('markups', markup);
+    markup.updatedAt = markup.updatedAt || new Date().toISOString();
+    const res = await this.put('markups', markup);
+    syncManager.pushItem('markup', markup);
+    return res;
   }
 
   async deleteMarkup(markupId) {
-    return this.delete('markups', markupId);
+    const res = await this.delete('markups', markupId);
+    syncManager.deleteItem('markup', markupId);
+    return res;
   }
 
   // Scratchpads

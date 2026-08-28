@@ -1,6 +1,6 @@
 /**
  * ThesisMind - Core Application Orchestrator
- * Connects PDF Viewer, Markup Engine, File Explorer, Annotation Studio, Search, Matrix, and TTS.
+ * Connects PDF Viewer, Markup Engine, File Explorer, Annotation Studio, Search, Matrix, TTS, and Firebase Cloud Sync.
  */
 
 import { db } from './db.js';
@@ -12,6 +12,8 @@ import { SummaryMatrixModal } from './matrix.js';
 import { GlobalSearchModal } from './search.js';
 import { exportFolderSummary } from './export.js';
 import { tts } from './tts.js';
+import { firebaseService } from './firebase.js';
+import { syncManager } from './sync.js';
 
 class ThesisMindApp {
   constructor() {
@@ -39,6 +41,7 @@ class ThesisMindApp {
     this._initHeaderEvents();
     this._initTTSPlayer();
     this._initSplitResizers();
+    this._initAuthAndSync();
 
     // 3. Load first paper
     const files = await db.getAll('files');
@@ -191,6 +194,173 @@ class ThesisMindApp {
     if (this.studio) {
       this.studio.renderEmpty();
     }
+  }
+
+  _initAuthAndSync() {
+    const loginBtn = document.getElementById('btn-google-login');
+    const profileMenu = document.getElementById('user-profile-menu');
+    const userAvatarBtn = document.getElementById('btn-user-avatar');
+    const userDropdown = document.getElementById('user-dropdown-popover');
+    const userAvatarImg = document.getElementById('user-avatar-img');
+    const userNameEl = document.getElementById('user-display-name');
+    const userEmailEl = document.getElementById('user-display-email');
+    
+    const syncBadge = document.getElementById('sync-status-badge');
+    const syncDot = document.getElementById('sync-status-dot');
+    const syncText = document.getElementById('sync-status-text');
+
+    const modalFirebase = document.getElementById('firebase-modal');
+    const configInput = document.getElementById('firebase-config-input');
+
+    // Subscribe to Auth state
+    firebaseService.subscribeAuth((user, isConfigured) => {
+      if (user) {
+        loginBtn?.classList.add('hidden');
+        profileMenu?.classList.remove('hidden');
+        syncBadge?.classList.remove('hidden');
+        syncBadge?.classList.add('flex');
+
+        if (userAvatarImg) userAvatarImg.src = user.photoURL || 'https://www.gravatar.com/avatar/?d=mp';
+        if (userNameEl) userNameEl.textContent = user.displayName || 'Google User';
+        if (userEmailEl) userEmailEl.textContent = user.email || '';
+      } else {
+        loginBtn?.classList.remove('hidden');
+        profileMenu?.classList.add('hidden');
+        syncBadge?.classList.add('hidden');
+        syncBadge?.classList.remove('flex');
+        userDropdown?.classList.add('hidden');
+      }
+    });
+
+    // Subscribe to Sync state
+    syncManager.subscribe((state) => {
+      if (!syncDot || !syncText) return;
+      if (state.status === 'syncing') {
+        syncDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping';
+        syncText.textContent = 'Syncing...';
+      } else if (state.status === 'synced') {
+        syncDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+        syncText.textContent = 'Synced';
+        // Refresh local views
+        this.explorer?.render();
+        if (this.currentFile && this.studio) {
+          this.studio.loadFile(this.currentFile);
+        }
+      } else if (state.status === 'error') {
+        syncDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+        syncText.textContent = 'Sync Error';
+      } else {
+        syncDot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-500';
+        syncText.textContent = 'Offline';
+      }
+    });
+
+    // Google Sign-In Click
+    loginBtn?.addEventListener('click', async () => {
+      try {
+        await firebaseService.signInWithGoogle();
+        this.showToast('Signed in successfully with Google!');
+      } catch (err) {
+        if (err.message === 'CONFIG_REQUIRED' || !firebaseService.isConfigured) {
+          this._openFirebaseModal();
+        } else {
+          this.showToast(`Login failed: ${err.message}`);
+        }
+      }
+    });
+
+    // Profile Dropdown Toggle
+    userAvatarBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userDropdown?.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (userDropdown && !userDropdown.contains(e.target) && !userAvatarBtn.contains(e.target)) {
+        userDropdown.classList.add('hidden');
+      }
+    });
+
+    // Menu Actions
+    document.getElementById('btn-menu-sync-now')?.addEventListener('click', async () => {
+      userDropdown?.classList.add('hidden');
+      this.showToast('Syncing with Cloud...');
+      await syncManager.syncAll();
+      this.showToast('Cloud Sync completed!');
+    });
+
+    syncBadge?.addEventListener('click', async () => {
+      this.showToast('Syncing with Cloud...');
+      await syncManager.syncAll();
+      this.showToast('Cloud Sync completed!');
+    });
+
+    document.getElementById('btn-menu-firebase-config')?.addEventListener('click', () => {
+      userDropdown?.classList.add('hidden');
+      this._openFirebaseModal();
+    });
+
+    document.getElementById('btn-menu-signout')?.addEventListener('click', async () => {
+      userDropdown?.classList.add('hidden');
+      await firebaseService.signOut();
+      this.showToast('Signed out');
+    });
+
+    // Firebase Setup Modal Events
+    document.getElementById('btn-close-firebase-modal')?.addEventListener('click', () => {
+      modalFirebase?.classList.add('hidden');
+    });
+
+    document.getElementById('btn-cancel-firebase-modal')?.addEventListener('click', () => {
+      modalFirebase?.classList.add('hidden');
+    });
+
+    document.getElementById('btn-save-firebase-modal')?.addEventListener('click', async () => {
+      const val = configInput?.value.trim();
+      if (!val) return;
+
+      try {
+        let configObj;
+        if (val.startsWith('{')) {
+          configObj = JSON.parse(val);
+        } else {
+          // Attempt key/value cleanup
+          const jsonStr = val.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":');
+          configObj = JSON.parse(jsonStr);
+        }
+
+        const success = firebaseService.saveConfig(configObj);
+        if (success) {
+          modalFirebase?.classList.add('hidden');
+          this.showToast('Firebase Connected! Now signing in with Google...');
+          try {
+            await firebaseService.signInWithGoogle();
+          } catch (e) {
+            console.log('User can click sign-in button');
+          }
+        } else {
+          alert('Invalid Firebase configuration object. Please make sure apiKey and projectId are present.');
+        }
+      } catch (err) {
+        alert('Could not parse JSON. Please paste a valid Firebase config object.');
+      }
+    });
+
+    document.getElementById('btn-clear-firebase-config')?.addEventListener('click', () => {
+      localStorage.removeItem('thesismind_firebase_config');
+      if (configInput) configInput.value = '';
+      this.showToast('Firebase configuration cleared');
+    });
+  }
+
+  _openFirebaseModal() {
+    const modalFirebase = document.getElementById('firebase-modal');
+    const configInput = document.getElementById('firebase-config-input');
+    const saved = firebaseService.getSavedConfig();
+    if (saved && configInput) {
+      configInput.value = JSON.stringify(saved, null, 2);
+    }
+    modalFirebase?.classList.remove('hidden');
   }
 
   _initHeaderEvents() {
