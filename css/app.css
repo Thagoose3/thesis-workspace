@@ -104,8 +104,7 @@ body {
   -webkit-user-select: text !important;
 }
 
-.textLayer span,
-.textLayer span br {
+.textLayer span {
   color: transparent !important;
   position: absolute;
   white-space: pre;
@@ -116,6 +115,11 @@ body {
   box-sizing: border-box;
   user-select: text !important;
   -webkit-user-select: text !important;
+}
+
+.textLayer br {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 /* Custom Blue Selection Tint for Active Text Selection */

@@ -812,57 +812,11 @@ export class PDFViewerEngine {
   _extractPreciseSelectionRects(range, pageEl) {
     const pageRect = pageEl.getBoundingClientRect();
     
-    // Extract exact text nodes intersecting the range (ignore empty whitespace margins)
-    const textNodes = [];
-    const root = range.commonAncestorContainer;
-    const walker = document.createTreeWalker(
-      root.nodeType === Node.TEXT_NODE ? root.parentNode : root,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-    
-    let node = walker.nextNode();
-    while (node) {
-      if (range.intersectsNode(node) && node.textContent.trim().length > 0) {
-        textNodes.push(node);
-      }
-      node = walker.nextNode();
-    }
-
-    const rawRects = [];
-    if (textNodes.length > 0) {
-      textNodes.forEach(tNode => {
-        const subRange = document.createRange();
-        const start = (tNode === range.startContainer) ? range.startOffset : 0;
-        const end = (tNode === range.endContainer) ? range.endOffset : tNode.textContent.length;
-        
-        // Trim leading and trailing whitespace so highlights never extend past actual text
-        const sliceText = tNode.textContent.substring(start, end);
-        const leadingSpaces = (sliceText.match(/^\s+/) || [''])[0].length;
-        const trailingSpaces = (sliceText.match(/\s+$/) || [''])[0].length;
-        
-        const actualStart = start + leadingSpaces;
-        const actualEnd = Math.max(actualStart, end - trailingSpaces);
-        
-        if (actualEnd > actualStart) {
-          subRange.setStart(tNode, actualStart);
-          subRange.setEnd(tNode, actualEnd);
-          Array.from(subRange.getClientRects()).forEach(r => {
-            if (r.width > 1 && r.height > 1) {
-              rawRects.push(r);
-            }
-          });
-        }
-      });
-    } else {
-      Array.from(range.getClientRects()).forEach(r => {
-        if (r.width > 2 && r.height > 2) rawRects.push(r);
-      });
-    }
-
+    // Use native browser client rects to guarantee 100% character completeness (never drops el, ly, By, ut, e.)
+    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 1 && r.height > 1);
     if (!rawRects.length) return [];
 
-    // Group rects into lines by vertical alignment (tolerance 6px)
+    // Group rects into lines by vertical position (tolerance 6px)
     const lines = [];
     rawRects.forEach(rect => {
       const matchedLine = lines.find(l => Math.abs(l.top - rect.top) < 6);
@@ -879,6 +833,15 @@ export class PDFViewerEngine {
       }
     });
 
+    // If the last line is just a stray tiny phantom rect (e.g. cursor overshot 1px past line end to next line), filter it out
+    if (lines.length > 1) {
+      const lastLine = lines[lines.length - 1];
+      const totalLastLineWidth = lastLine.rects.reduce((sum, r) => sum + r.width, 0);
+      if (totalLastLineWidth < 5) {
+        lines.pop();
+      }
+    }
+
     const mergedRects = [];
     lines.forEach(line => {
       line.rects.sort((a, b) => a.left - b.left);
@@ -891,7 +854,8 @@ export class PDFViewerEngine {
 
       for (let i = 1; i < line.rects.length; i++) {
         const r = line.rects[i];
-        if (r.left <= cur.right + 6) {
+        // Merge horizontally adjacent / overlapping text fragments on the same line
+        if (r.left <= cur.right + 10) {
           cur.right = Math.max(cur.right, r.right);
         } else {
           mergedRects.push({
@@ -917,8 +881,8 @@ export class PDFViewerEngine {
     });
 
     return mergedRects.map(r => {
-      const adjustedTop = r.top + r.height * 0.05;
-      const adjustedHeight = r.height * 0.90;
+      const adjustedTop = r.top + r.height * 0.02;
+      const adjustedHeight = r.height * 0.96;
       return {
         left: Math.max(0, (r.left - pageRect.left) / pageRect.width),
         top: Math.max(0, (adjustedTop - pageRect.top) / pageRect.height),
