@@ -1,14 +1,17 @@
 /**
- * ThesisMind Intelligent Speech Synthesis (TTS) Engine - "F.R.I.D.A.Y." AI Persona
+ * ThesisMind Intelligent Speech Synthesis (TTS) Engine - "F.R.I.D.A.Y." & Thai Tactical AI Assistant
+ * Voice Persona: AI ผู้หญิง โทนใจเย็น สุขุม ฉลาด ชัดถ้อยชัดคำ และคอยประสานงานข้างหู
  * Features:
- * - Dual Language support (Thai & English) tuned to the sleek, crisp, intelligent "F.R.I.D.A.Y." AI tone.
- * - Instant togglePlay/Stop support (Click to read, click again to stop, or press ESC).
- * - Text preprocessing for smooth academic cadence (strips bracket citations [1], URLs, markdown).
+ * - Dual Language support (Thai & English) with auto-detection.
+ * - Subdued, highly articulate, calm tactical AI co-pilot cadence.
+ * - Subtle earphone comms link cue (Web Audio API).
+ * - Instant togglePlay / Stop everywhere (Click to read, click again to stop, or press ESC).
  */
 
 class TTSEngine {
   constructor() {
     this.synth = window.speechSynthesis;
+    this.audioCtx = null;
     this.currentUtterance = null;
     this.isPlaying = false;
     this.isPaused = false;
@@ -23,7 +26,6 @@ class TTSEngine {
 
   _initKeyboardShortcut() {
     window.addEventListener('keydown', (e) => {
-      // ESC stops audio immediately
       if (e.key === 'Escape' && this.isPlaying) {
         this.stop();
       }
@@ -40,9 +42,42 @@ class TTSEngine {
     }
   }
 
+  // Play a soft, futuristic earphone link chime when AI starts speaking
+  _playCommsCue() {
+    try {
+      if (!this.audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) this.audioCtx = new AudioContext();
+      }
+      if (!this.audioCtx) return;
+
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+
+      const now = this.audioCtx.currentTime;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(580, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.06);
+
+      gain.gain.setValueAtTime(0.025, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (err) {
+      // Audio context might be restricted, ignore silently
+    }
+  }
+
   subscribe(listener) {
     this.listeners.add(listener);
-    // Initial notify
     listener({
       isPlaying: this.isPlaying,
       isPaused: this.isPaused,
@@ -68,13 +103,13 @@ class TTSEngine {
     return /[\u0E00-\u0E7F]/.test(text);
   }
 
-  getThaiFridayVoice() {
+  getThaiAssistantVoice() {
     if (!this.voices.length) this._loadVoices();
-    // Prioritize natural, articulate Thai female AI voice
+    // Prioritize soothing, natural, ultra-intelligent Thai female voices (Premwadee / Natural / Online)
     return (
-      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Premwadee'))) ||
+      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Premwadee') || v.name.includes('Natural') || v.name.includes('Online'))) ||
       this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && v.name.includes('Google')) ||
-      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) ||
+      this.voices.find(v => (v.lang.startsWith('th') || v.lang.includes('TH')) && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Achara') || v.name.includes('Female'))) ||
       this.voices.find(v => v.lang.startsWith('th') || v.lang.includes('TH')) ||
       null
     );
@@ -82,7 +117,6 @@ class TTSEngine {
 
   getEnglishFridayVoice() {
     if (!this.voices.length) this._loadVoices();
-    // FRIDAY persona: Irish (en-IE) or British (en-GB) crisp AI assistant voice
     return (
       // 1. Irish English (FRIDAY original accent from Iron Man / Kerry Condon)
       this.voices.find(v => (v.lang === 'en-IE' || v.lang.startsWith('en_IE')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Emily') || v.name.includes('Moira'))) ||
@@ -103,8 +137,9 @@ class TTSEngine {
     return text
       .replace(/\[\d+(?:,\s*\d+)*\]/g, '') // remove [1], [2, 3] citations
       .replace(/\((?:(?:19|20)\d{2}|[A-Z][a-z]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2})\)/g, '') // remove (Chen et al., 2024)
-      .replace(/https?:\/\/\S+/g, 'link')
+      .replace(/https?:\/\/\S+/g, 'ลิงก์')
       .replace(/[*_#`~>]/g, '') // strip markdown
+      .replace(/[-•]\s+/g, '. ') // turn bullet dashes into natural cadence pauses
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -122,6 +157,8 @@ class TTSEngine {
     const cleanText = this._cleanTextForSpeech(text);
     if (!cleanText) return;
 
+    this._playCommsCue();
+
     this.currentText = text.trim();
     this.currentUtterance = new SpeechSynthesisUtterance(cleanText);
 
@@ -129,18 +166,22 @@ class TTSEngine {
 
     if (isThai) {
       this.currentUtterance.lang = 'th-TH';
-      const thaiVoice = this.getThaiFridayVoice();
+      const thaiVoice = this.getThaiAssistantVoice();
       if (thaiVoice) this.currentUtterance.voice = thaiVoice;
-      // F.R.I.D.A.Y. Thai Tone: Crisp, intelligent, clear pitch & calm cadence
-      this.currentUtterance.pitch = 1.08;
-      this.currentUtterance.rate = this.rate * 1.02;
+      
+      // Tone: AI ผู้หญิงใจเย็น สุขุม ฉลาด ประสานงานข้างหู
+      // Pitch: 0.98 - 1.0 (โทนเสียงสงบนิ่ง สบายหู ไม่แหลม ไม่สังเคราะห์เกินไป)
+      // Rate: 0.96 (จังหวะพอดีๆ ไม่เร่งรีบ สุขุม ชัดถ้อยชัดคำ)
+      this.currentUtterance.pitch = 1.0;
+      this.currentUtterance.rate = this.rate * 0.97;
     } else {
       this.currentUtterance.lang = 'en-GB';
       const fridayVoice = this.getEnglishFridayVoice();
       if (fridayVoice) this.currentUtterance.voice = fridayVoice;
-      // F.R.I.D.A.Y. English Tone: Signature Marvel AI cadence
-      this.currentUtterance.pitch = 1.08;
-      this.currentUtterance.rate = this.rate * 1.03;
+      
+      // F.R.I.D.A.Y. English Tone
+      this.currentUtterance.pitch = 1.05;
+      this.currentUtterance.rate = this.rate * 1.0;
     }
 
     this.currentUtterance.onstart = () => {
@@ -156,7 +197,6 @@ class TTSEngine {
     };
 
     this.currentUtterance.onerror = (e) => {
-      console.warn('TTS Speech ended/cancelled:', e);
       this.isPlaying = false;
       this.isPaused = false;
       this.notify();
