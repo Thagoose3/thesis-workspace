@@ -1,6 +1,8 @@
 /**
  * Ultra-Minimalist File Explorer & Folder Tree Component
  * Clean, distraction-free document tree inspired by Notion / Linear.
+ * Features: Subfolders, Tags, Drag-and-drop, Rename, Move, Delete,
+ * and "Hide from Sidebar / Archive" with Restore option.
  */
 
 import { db } from './db.js';
@@ -15,10 +17,13 @@ export class FileExplorer {
     this.folders = [];
     this.files = [];
     this.selectedFileId = null;
+    this.showHidden = false; // Toggle to view hidden papers
+    
     this.onFileSelect = options.onFileSelect || (() => {});
     this.onFolderChange = options.onFolderChange || (() => {});
     this.onOpenMatrix = options.onOpenMatrix || (() => {});
     this.onExportFolder = options.onExportFolder || (() => {});
+    this.onShowToast = options.onShowToast || ((msg) => console.log(msg));
   }
 
   async init() {
@@ -58,7 +63,7 @@ export class FileExplorer {
   getAllTags() {
     const tagsSet = new Set();
     this.files.forEach(f => {
-      if (Array.isArray(f.tags)) {
+      if (!f.isHidden && Array.isArray(f.tags)) {
         f.tags.forEach(t => tagsSet.add(t));
       }
     });
@@ -67,11 +72,21 @@ export class FileExplorer {
 
   getFilteredFiles() {
     let list = this.files;
+    
+    // Filter by folder or tag
     if (this.activeTag) {
       list = list.filter(f => f.tags && f.tags.includes(this.activeTag));
     } else if (this.currentFolderId !== null) {
       list = list.filter(f => f.folderId === this.currentFolderId);
+    } else {
+      list = list.filter(f => f.folderId === null);
     }
+
+    // Filter hidden unless showHidden is true
+    if (!this.showHidden) {
+      list = list.filter(f => !f.isHidden);
+    }
+
     return list;
   }
 
@@ -79,11 +94,19 @@ export class FileExplorer {
     return this.folders.filter(f => f.parentId === this.currentFolderId);
   }
 
+  getHiddenCount() {
+    if (this.activeTag) {
+      return this.files.filter(f => f.isHidden && f.tags && f.tags.includes(this.activeTag)).length;
+    }
+    return this.files.filter(f => f.isHidden && f.folderId === this.currentFolderId).length;
+  }
+
   render() {
     const breadcrumbPath = this.getBreadcrumbPath(this.currentFolderId);
     const subfolders = this.getCurrentFolderChildren();
     const files = this.getFilteredFiles();
     const allTags = this.getAllTags();
+    const hiddenCount = this.getHiddenCount();
 
     this.container.innerHTML = `
       <div class="h-full flex flex-col bg-zinc-900 text-zinc-300 border-r border-white/[0.06] select-none">
@@ -167,13 +190,18 @@ export class FileExplorer {
               <div class="space-y-1">
                 ${files.map(file => {
                   const isSelected = file.id === this.selectedFileId;
+                  const isFileHidden = Boolean(file.isHidden);
+
                   return `
-                    <div class="group px-2.5 py-2 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'}" data-file-id="${file.id}">
+                    <div class="group px-2.5 py-2 rounded-xl transition cursor-pointer file-item ${isSelected ? 'bg-blue-600/15 text-zinc-100 ring-1 ring-blue-500/40' : 'hover:bg-white/[0.04] text-zinc-300'} ${isFileHidden ? 'opacity-50' : ''}" data-file-id="${file.id}">
                       <div class="flex items-start justify-between space-x-2">
                         <div class="flex items-start space-x-2 min-w-0 flex-1">
                           <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                           <div class="min-w-0 flex-1">
-                            <p class="text-xs font-medium truncate ${isSelected ? 'text-blue-200' : 'text-zinc-200 group-hover:text-zinc-100'}">${file.name}</p>
+                            <div class="flex items-center space-x-1.5">
+                              <p class="text-xs font-medium truncate ${isSelected ? 'text-blue-200' : 'text-zinc-200 group-hover:text-zinc-100'}">${file.name}</p>
+                              ${isFileHidden ? `<span class="px-1 py-0.2 rounded bg-zinc-800 text-[9px] font-mono text-zinc-400">hidden</span>` : ''}
+                            </div>
                             <div class="flex items-center space-x-1.5 mt-0.5 text-[10px] text-zinc-500">
                               <span>${file.pageCount || 1}p</span>
                               <span>·</span>
@@ -187,10 +215,23 @@ export class FileExplorer {
                           <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-zinc-200 btn-rename-file" data-file-id="${file.id}" title="Rename">
                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                           </button>
-                          <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-blue-400 btn-move-file" data-file-id="${file.id}" title="Move">
+                          <button class="p-1 hover:bg-white/[0.08] rounded text-zinc-400 hover:text-blue-400 btn-move-file" data-file-id="${file.id}" title="Move to Folder">
                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
                           </button>
-                          <button class="p-1 hover:bg-rose-900/40 rounded text-zinc-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete">
+
+                          ${isFileHidden ? `
+                            <!-- Restore / Unhide button -->
+                            <button class="p-1 hover:bg-emerald-950/40 rounded text-emerald-400 hover:text-emerald-300 btn-unhide-file" data-file-id="${file.id}" title="Show back in sidebar (นำกลับมาแสดงในแถบข้าง)">
+                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            </button>
+                          ` : `
+                            <!-- Hide from sidebar button (เอาออกจากแถบข้างแต่ยังอยู่ในโฟลเดอร์) -->
+                            <button class="p-1 hover:bg-amber-950/40 rounded text-zinc-400 hover:text-amber-400 btn-hide-file" data-file-id="${file.id}" title="Remove from sidebar (เอาออกจากแถบข้าง - ยังเก็บอยู่ในโฟลเดอร์)">
+                              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                            </button>
+                          `}
+
+                          <button class="p-1 hover:bg-rose-900/40 rounded text-zinc-400 hover:text-rose-400 btn-delete-file" data-file-id="${file.id}" title="Delete Permanently">
                             <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                           </button>
                         </div>
@@ -200,6 +241,16 @@ export class FileExplorer {
                 }).join('')}
               </div>
             `}
+
+            <!-- Hidden Files Drawer Toggle -->
+            ${hiddenCount > 0 ? `
+              <div class="pt-2 px-1 flex items-center justify-between text-[10px] text-zinc-500 font-mono border-t border-white/[0.04]">
+                <span>Hidden (${hiddenCount})</span>
+                <button id="btn-toggle-hidden" class="text-blue-400 hover:text-blue-300 underline font-sans transition">
+                  ${this.showHidden ? 'Hide hidden' : 'Show hidden'}
+                </button>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -249,6 +300,42 @@ export class FileExplorer {
           this.render();
         }
       });
+    });
+
+    // Hide file from sidebar
+    this.container.querySelectorAll('.btn-hide-file').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const fileId = btn.getAttribute('data-file-id');
+        const file = this.files.find(f => f.id === fileId);
+        if (file) {
+          file.isHidden = true;
+          await db.saveFile(file);
+          this.onShowToast(`Removed "${file.name}" from sidebar (still in folder)`);
+          await this.refresh();
+        }
+      });
+    });
+
+    // Unhide / Restore file to sidebar
+    this.container.querySelectorAll('.btn-unhide-file').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const fileId = btn.getAttribute('data-file-id');
+        const file = this.files.find(f => f.id === fileId);
+        if (file) {
+          file.isHidden = false;
+          await db.saveFile(file);
+          this.onShowToast(`Restored "${file.name}" to sidebar`);
+          await this.refresh();
+        }
+      });
+    });
+
+    // Toggle show/hide hidden papers
+    this.container.querySelector('#btn-toggle-hidden')?.addEventListener('click', () => {
+      this.showHidden = !this.showHidden;
+      this.render();
     });
 
     // New Folder Button
@@ -459,7 +546,7 @@ export class FileExplorer {
   async promptDeleteFile(fileId) {
     const file = this.files.find(f => f.id === fileId);
     if (!file) return;
-    if (confirm(`Delete "${file.name}"?`)) {
+    if (confirm(`Delete "${file.name}" permanently?`)) {
       await db.deleteFileComplete(fileId);
       if (this.selectedFileId === fileId) {
         this.selectedFileId = null;

@@ -1,6 +1,5 @@
 /**
  * ThesisMind Data Models & Type Helpers
- * Extended with Rich Markup & Annotation Models (Text Box, Image/Figure, Drawing, Shape).
  */
 
 export function generateId(prefix = 'id') {
@@ -41,7 +40,7 @@ export function createFolder({ name, parentId = null }) {
   };
 }
 
-export function createPaperFile({ name, folderId = null, size = 0, mimeType = 'application/pdf', tags = [], pdfData = null, pageCount = 1 }) {
+export function createPaperFile({ name, folderId = null, size = 0, mimeType = 'application/pdf', tags = [], pdfData = null, pageCount = 1, isHidden = false }) {
   return {
     id: generateId('file'),
     name: name.trim(),
@@ -51,6 +50,7 @@ export function createPaperFile({ name, folderId = null, size = 0, mimeType = 'a
     tags: Array.isArray(tags) ? tags : [],
     pdfData,
     pageCount,
+    isHidden: Boolean(isHidden),
     readingProgress: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -86,7 +86,7 @@ export function createMarkupItem({ fileId, pageNumber = 1, type = 'textbox', x =
     id: generateId('mk'),
     fileId,
     pageNumber: Number(pageNumber),
-    type, // 'textbox' | 'image' | 'drawing' | 'shape'
+    type,
     x: Math.max(0, Math.min(1, x)),
     y: Math.max(0, Math.min(1, y)),
     width: Math.max(0.05, Math.min(1, width)),

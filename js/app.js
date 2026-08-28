@@ -56,7 +56,8 @@ class ThesisMindApp {
       onExportFolder: async (folderId) => {
         await exportFolderSummary(folderId);
         this.showToast('Folder Review exported as Markdown!');
-      }
+      },
+      onShowToast: (msg) => this.showToast(msg)
     });
     this.explorer.init();
   }
@@ -152,8 +153,43 @@ class ThesisMindApp {
     const titleEl = document.getElementById('current-file-title');
     if (titleEl) titleEl.textContent = file.name;
 
+    const closeBtn = document.getElementById('btn-close-current-file');
+    if (closeBtn) closeBtn.classList.remove('hidden');
+
     await this.viewer.loadPDF(file);
     await this.studio.loadFile(file);
+  }
+
+  closeCurrentFile() {
+    this.currentFile = null;
+    if (this.explorer) {
+      this.explorer.selectedFileId = null;
+      this.explorer.render();
+    }
+
+    const titleEl = document.getElementById('current-file-title');
+    if (titleEl) titleEl.textContent = 'No Document Selected';
+
+    const closeBtn = document.getElementById('btn-close-current-file');
+    if (closeBtn) closeBtn.classList.add('hidden');
+
+    const ind = document.getElementById('page-indicator');
+    const inp = document.getElementById('page-input');
+    if (ind) ind.textContent = '/ 1';
+    if (inp) inp.value = 1;
+
+    const container = document.getElementById('pdf-canvas-container');
+    if (container) {
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full text-zinc-600 space-y-2">
+          <p class="text-xs text-zinc-500 font-medium">Select a thesis paper from the left panel to begin reading</p>
+        </div>
+      `;
+    }
+
+    if (this.studio) {
+      this.studio.renderEmpty();
+    }
   }
 
   _initHeaderEvents() {
@@ -164,6 +200,10 @@ class ThesisMindApp {
     document.getElementById('btn-header-matrix')?.addEventListener('click', () => {
       const currentFolderId = this.explorer ? this.explorer.currentFolderId : null;
       this.matrixModal.open(currentFolderId);
+    });
+
+    document.getElementById('btn-close-current-file')?.addEventListener('click', () => {
+      this.closeCurrentFile();
     });
 
     const leftCol = document.getElementById('explorer-col');
