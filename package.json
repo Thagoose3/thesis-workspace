@@ -1,0 +1,21 @@
+{
+  "name": "thesismind-workspace",
+  "version": "1.0.0",
+  "description": "Thesis Reading, Annotation & Literature Review Studio",
+  "author": "ThesisMind",
+  "license": "MIT",
+  "main": "index.html",
+  "scripts": {
+    "start": "python serve.py",
+    "dev": "python serve.py"
+  },
+  "keywords": [
+    "thesis",
+    "research-papers",
+    "pdf-annotation",
+    "literature-review",
+    "bibtex",
+    "citation-manager",
+    "matrix"
+  ]
+}

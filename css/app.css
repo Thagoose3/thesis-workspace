@@ -1,0 +1,277 @@
+/* ThesisMind Custom Stylesheet */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #0f172a;
+  color: #f8fafc;
+  overflow: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Fix PDF Page Container Aspect Ratio */
+.pdf-page-container {
+  flex-shrink: 0 !important;
+  box-sizing: content-box !important;
+  display: block !important;
+  position: relative !important;
+}
+
+/* PDF Paper Theme Filters */
+.pdf-theme-light {
+  filter: none;
+  background-color: #ffffff;
+}
+
+.pdf-theme-sepia {
+  filter: sepia(45%) contrast(92%) brightness(96%);
+  background-color: #fbf0d9 !important;
+}
+
+.pdf-theme-dark {
+  filter: invert(90%) hue-rotate(180deg) contrast(110%) brightness(90%);
+  background-color: #1e293b !important;
+}
+
+/* PDF Text Layer Selection & Highlighting */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+     -moz-text-size-adjust: none;
+          text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.textLayer ::selection {
+  background: rgba(59, 130, 246, 0.5) !important;
+  color: transparent !important;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+/* Highlight Overlay Colors on Canvas */
+.pdf-highlight {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  mix-blend-mode: multiply;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  border-radius: 2px;
+  z-index: 3;
+}
+
+.pdf-highlight:hover {
+  opacity: 0.85 !important;
+  outline: 2px solid rgba(0, 0, 0, 0.3);
+}
+
+.highlight-yellow {
+  background-color: rgba(254, 240, 138, 0.55);
+}
+.highlight-green {
+  background-color: rgba(187, 247, 208, 0.6);
+}
+.highlight-blue {
+  background-color: rgba(191, 219, 254, 0.65);
+}
+.highlight-purple {
+  background-color: rgba(233, 213, 255, 0.65);
+}
+.highlight-pink {
+  background-color: rgba(251, 207, 232, 0.65);
+}
+
+/* Dark mode adjustment for highlights */
+.pdf-theme-dark .pdf-highlight {
+  mix-blend-mode: screen;
+}
+
+/* Floating Toolbar Animation */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.floating-toolbar {
+  animation: popIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(30, 41, 59, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-dropdown {
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Resizer Bars */
+.resizer-h {
+  width: 4px;
+  cursor: col-resize;
+  transition: background-color 0.2s ease;
+  z-index: 20;
+}
+.resizer-h:hover, .resizer-h.resizing {
+  background-color: #3b82f6 !important;
+}
+
+/* Markdown Render Styling */
+.markdown-preview h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: #f1f5f9;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.25rem;
+}
+.markdown-preview h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0.85rem;
+  margin-bottom: 0.4rem;
+  color: #e2e8f0;
+}
+.markdown-preview h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.3rem;
+  color: #cbd5e1;
+}
+.markdown-preview p {
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+.markdown-preview ul, .markdown-preview ol {
+  margin-left: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #cbd5e1;
+}
+.markdown-preview ul {
+  list-style-type: disc;
+}
+.markdown-preview ol {
+  list-style-type: decimal;
+}
+.markdown-preview blockquote {
+  border-left: 3px solid #3b82f6;
+  padding-left: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 0 4px 4px 0;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.markdown-preview code {
+  font-family: var(--font-mono);
+  background: rgba(51, 65, 85, 0.7);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.875em;
+  color: #38bdf8;
+}
+.markdown-preview pre code {
+  display: block;
+  padding: 0.75rem;
+  overflow-x: auto;
+  background: #090d16;
+  color: #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+.markdown-preview th, .markdown-preview td {
+  border: 1px solid #334155;
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-preview th {
+  background: rgba(30, 41, 59, 0.8);
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* Toast Notification Animation */
+@keyframes slideUpFade {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.toast-animate {
+  animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Pulse highlight on jump to page */
+@keyframes highlightFlash {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+  50% { transform: scale(1.03); box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+.highlight-flash {
+  animation: highlightFlash 1.2s ease-in-out;
+}
